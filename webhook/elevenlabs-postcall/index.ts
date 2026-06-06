@@ -67,6 +67,22 @@ async function mem0Summary(studentId: string): Promise<string | null> {
   }
 }
 
+// Write the conversation into Mem0 so the student's memory grows each session.
+async function mem0Add(studentId: string, transcript: any[]): Promise<void> {
+  if (!MEM0_API_KEY) return;
+  const messages = transcript
+    .filter((t) => t?.message)
+    .map((t) => ({ role: t.role === "agent" ? "assistant" : "user", content: t.message }));
+  if (!messages.length) return;
+  try {
+    await fetch("https://api.mem0.ai/v1/memories/", {
+      method: "POST",
+      headers: { Authorization: `Token ${MEM0_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, user_id: studentId }),
+    });
+  } catch (_e) { /* best-effort */ }
+}
+
 function dynamicVars(data: any): Record<string, any> {
   return data?.conversation_initiation_client_data?.dynamic_variables ?? data?.dynamic_variables ?? {};
 }
@@ -125,6 +141,7 @@ Deno.serve(async (req) => {
     }, { onConflict: "conversation_id" });
     if (error) console.error("session upsert error", error);
 
+    await mem0Add(studentId, transcript);            // grow the student's memory
     const summary = await mem0Summary(studentId);
     if (summary) {
       await supabase.from("memory_snapshots").insert({ student_id: studentId, summary });
