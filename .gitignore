@@ -1,0 +1,29 @@
+# Secrets - NEVER commit
+.env
+.env.*
+!.env.example
+*secret*
+*secrets*
+*.key
+**/serviceAccount*.json
+
+# Node / app build
+node_modules/
+dist/
+build/
+.next/
+.vercel/
+.supabase/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
