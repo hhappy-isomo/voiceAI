@@ -71,18 +71,19 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    const [{ data: row }, { data: caps }] = await Promise.all([
+    const [{ data: row }, statusRes] = await Promise.all([
       supabase
         .from("students")
         .select("role, suspended")
         .eq("student_id", user.id)
         .maybeSingle(),
-      supabase
-        .from("cost_caps")
-        .select("kill_all, drain_mode")
-        .eq("id", 1)
-        .maybeSingle(),
+      // cost_caps RLS is staff-only by design; this RPC is SECURITY
+      // DEFINER and exposes ONLY the two boolean flags students need.
+      supabase.rpc("get_pilot_status"),
     ]);
+    const caps = (Array.isArray(statusRes.data) ? statusRes.data[0] : statusRes.data) as
+      | { kill_all: boolean | null; drain_mode: boolean | null }
+      | undefined;
     const role = (row?.role ?? "student") as
       | "student"
       | "facilitator"
