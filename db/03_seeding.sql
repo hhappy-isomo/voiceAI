@@ -11,9 +11,12 @@ create table if not exists pending_students (
   email        text not null,
   display_name text,
   cohort       text not null default 'base' check (cohort in ('base','foundation')),
-  added_at     timestamptz not null default now(),
-  unique (lower(email))
+  added_at     timestamptz not null default now()
 );
+
+-- Case-insensitive uniqueness on email (must be a separate index in pg).
+create unique index if not exists pending_students_email_key
+  on pending_students (lower(email));
 
 -- Replace the auth trigger to look up by email first.
 create or replace function handle_new_user()
