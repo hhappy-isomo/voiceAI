@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/cn";
 
-const QUESTIONS: { key: `q${number}`; text: string; reversed?: boolean }[] = [
+type Q = { key: `q${number}`; text: string; reversed?: boolean };
+
+const PRE_QUESTIONS: Q[] = [
   { key: "q1", text: "I feel nervous speaking English aloud.", reversed: true },
   { key: "q2", text: "I worry about making mistakes when I speak.", reversed: true },
   { key: "q3", text: "My heart races when I have to speak English.", reversed: true },
@@ -14,23 +16,37 @@ const QUESTIONS: { key: `q${number}`; text: string; reversed?: boolean }[] = [
   { key: "q6", text: "I can handle unexpected questions in English." },
   { key: "q7", text: "I look for chances to practice speaking English." },
   { key: "q8", text: "I enjoy joining English conversations." },
-  { key: "q9", text: "I enjoy speaking with the AI tutor." },
+  { key: "q9", text: "I want to practice with the AI tutor." },
+  { key: "q10", text: "I expect this will help my English." },
+];
+
+const POST_QUESTIONS: Q[] = [
+  { key: "q1", text: "I still feel nervous speaking English aloud.", reversed: true },
+  { key: "q2", text: "I worry about making mistakes when I speak.", reversed: true },
+  { key: "q3", text: "My heart races when I have to speak English.", reversed: true },
+  { key: "q4", text: "I can express my ideas clearly in English." },
+  { key: "q5", text: "I feel confident in English conversations." },
+  { key: "q6", text: "I can handle unexpected questions in English." },
+  { key: "q7", text: "I look for chances to practice speaking English." },
+  { key: "q8", text: "I enjoy joining English conversations." },
+  { key: "q9", text: "I enjoyed speaking with the AI tutor." },
   { key: "q10", text: "I want to keep practicing with this tool." },
 ];
 
 const SCALE = [1, 2, 3, 4, 5];
 
-export function QuestionnaireForm({
-  students,
+export function StudentQuestionnaireForm({
+  sitting,
+  alreadyDone,
 }: {
-  students: { id: string; name: string }[];
+  sitting: "pre" | "post";
+  alreadyDone: boolean;
 }) {
   const router = useRouter();
+  const QUESTIONS = sitting === "post" ? POST_QUESTIONS : PRE_QUESTIONS;
+  const [answers, setAnswers] = useState<Record<string, number>>({});
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [studentId, setStudentId] = useState(students[0]?.id ?? "");
-  const [sitting, setSitting] = useState<"pre" | "post">("pre");
-  const [answers, setAnswers] = useState<Record<string, number>>({});
 
   function setAnswer(key: string, val: number) {
     setAnswers((a) => ({ ...a, [key]: val }));
@@ -38,56 +54,53 @@ export function QuestionnaireForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setPending(true);
-    setMessage(null);
     const missing = QUESTIONS.filter((q) => answers[q.key] == null);
     if (missing.length) {
-      setPending(false);
-      setMessage(`Missing ${missing.length} response${missing.length === 1 ? "" : "s"}.`);
+      setMessage(`Answer all ${QUESTIONS.length} questions (${missing.length} left).`);
       return;
     }
+    if (
+      alreadyDone &&
+      !confirm("You've already submitted this survey. Replace your previous answers?")
+    ) {
+      return;
+    }
+    setPending(true);
+    setMessage(null);
     const supabase = createClient();
-    const { error } = await supabase.from("questionnaire_responses").upsert(
-      { student_id: studentId, sitting, ...answers },
-      { onConflict: "student_id,sitting" },
-    );
+    const { error } = await supabase.rpc("submit_questionnaire", {
+      p_sitting: sitting,
+      p_q1: answers.q1, p_q2: answers.q2, p_q3: answers.q3, p_q4: answers.q4, p_q5: answers.q5,
+      p_q6: answers.q6, p_q7: answers.q7, p_q8: answers.q8, p_q9: answers.q9, p_q10: answers.q10,
+    });
     setPending(false);
     if (error) {
       setMessage(`Error: ${error.message}`);
-    } else {
-      setMessage("Saved.");
-      router.refresh();
+      return;
     }
+    setMessage("Thanks — your answers are in.");
+    router.refresh();
   }
+
+  const progress = Object.keys(answers).length;
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Student">
-          <select
-            value={studentId}
-            onChange={(e) => setStudentId(e.target.value)}
-            required
-            className={selectCls}
-          >
-            {students.map((s) => (
-              <option key={s.id} value={s.id} className="bg-bg">
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Sitting">
-          <select
-            value={sitting}
-            onChange={(e) => setSitting(e.target.value as "pre" | "post")}
-            required
-            className={selectCls}
-          >
-            <option value="pre" className="bg-bg">Pre</option>
-            <option value="post" className="bg-bg">Post</option>
-          </select>
-        </Field>
+      <div>
+        <p className="text-fg-dim leading-relaxed">
+          {sitting === "pre"
+            ? "Before you start your six-week journey, tell us where you're at. No right or wrong answers — your honest score is what helps."
+            : "You made it through six weeks. Same ten questions — let's see how it sits with you now."}
+        </p>
+        <div className="mt-3 flex items-center gap-2 text-[10px] uppercase tracking-widest text-fg-muted">
+          <span className="tabular-nums">{progress}</span> / {QUESTIONS.length} answered
+          <div className="ml-2 flex-1 h-2 border border-fg/40">
+            <div
+              className="h-full bg-fg transition-all"
+              style={{ width: `${(progress / QUESTIONS.length) * 100}%` }}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="border border-fg/20">
@@ -108,11 +121,6 @@ export function QuestionnaireForm({
                 {q.key.toUpperCase()}
               </span>
               {q.text}
-              {q.reversed && (
-                <span className="ml-2 border border-fg/40 px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-fg-muted">
-                  Anxiety
-                </span>
-              )}
             </div>
             <div className="flex border border-fg/30">
               {SCALE.map((n) => {
@@ -123,7 +131,7 @@ export function QuestionnaireForm({
                     type="button"
                     onClick={() => setAnswer(q.key, n)}
                     className={cn(
-                      "h-8 w-8 border-r border-fg/30 text-xs font-bold tabular-nums last:border-r-0",
+                      "h-9 w-9 border-r border-fg/30 text-sm font-bold tabular-nums last:border-r-0",
                       active ? "bg-fg text-bg" : "text-fg-dim hover:bg-fg/10 hover:text-fg",
                     )}
                   >
@@ -141,7 +149,7 @@ export function QuestionnaireForm({
         disabled={pending}
         className="w-full border border-fg bg-fg px-5 py-3 text-sm font-bold uppercase tracking-wider text-bg transition-colors hover:bg-bg hover:text-fg disabled:opacity-60"
       >
-        {pending ? "Saving…" : "Save questionnaire"}
+        {pending ? "Saving…" : "Submit"}
       </button>
 
       {message && (
@@ -152,17 +160,3 @@ export function QuestionnaireForm({
     </form>
   );
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-fg-muted">
-        {label}
-      </div>
-      {children}
-    </label>
-  );
-}
-
-const selectCls =
-  "w-full appearance-none border border-fg/30 bg-bg px-3 py-2.5 text-sm text-fg outline-none focus:border-fg";

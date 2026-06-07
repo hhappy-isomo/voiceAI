@@ -20,7 +20,10 @@ import { createClient } from "@/lib/supabase/client";
 
 type Item = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 
-const studentNav: Item[] = [{ href: "/", label: "Today", icon: Mic }];
+const studentNav: Item[] = [
+  { href: "/", label: "Today", icon: Mic },
+  { href: "/questionnaire", label: "Survey", icon: ClipboardCheck },
+];
 
 const facilitatorNav: Item[] = [
   { href: "/dashboard", label: "Dash", icon: LayoutDashboard },
@@ -28,7 +31,6 @@ const facilitatorNav: Item[] = [
   { href: "/dashboard/staff", label: "Staff", icon: ShieldCheck },
   { href: "/dashboard/seed", label: "Seed", icon: UserPlus },
   { href: "/dashboard/assessments", label: "Tests", icon: ClipboardList },
-  { href: "/dashboard/questionnaire", label: "Survey", icon: ClipboardCheck },
 ];
 
 export function MobileNav({

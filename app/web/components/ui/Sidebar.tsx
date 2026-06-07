@@ -22,6 +22,7 @@ type Item = { href: string; label: string; icon: React.ComponentType<{ className
 
 const studentNav: Item[] = [
   { href: "/", label: "Today", icon: Mic },
+  { href: "/questionnaire", label: "Survey", icon: ClipboardCheck },
 ];
 
 const facilitatorNav: Item[] = [
@@ -30,7 +31,6 @@ const facilitatorNav: Item[] = [
   { href: "/dashboard/staff", label: "Staff", icon: ShieldCheck },
   { href: "/dashboard/seed", label: "Seed roster", icon: UserPlus },
   { href: "/dashboard/assessments", label: "Assessments", icon: ClipboardList },
-  { href: "/dashboard/questionnaire", label: "Questionnaire", icon: ClipboardCheck },
 ];
 
 export function Sidebar({
