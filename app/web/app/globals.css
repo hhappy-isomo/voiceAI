@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #000000;
+  --color-bg-2: #000000;
+  --color-panel: #000000;
+  --color-panel-2: #000000;
+  --color-fg: #ffffff;
+  --color-fg-dim: #c8c8c8;
+  --color-fg-muted: #7a7a7a;
+  --color-border: #ffffff;
+  --color-border-hi: #ffffff;
+
+  /* Legacy accent tokens — collapsed to fg/bg for monochrome */
+  --color-violet: var(--color-fg);
+  --color-violet-2: var(--color-fg);
+  --color-cyan: var(--color-fg);
+  --color-magenta: var(--color-fg);
+  --color-mint: var(--color-fg);
+  --color-warn: var(--color-fg);
+  --color-danger: var(--color-fg);
+
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 0px;
+  --shadow-glow: none;
+}
+
+/* Day mode overrides (night is the default) */
+:root[data-theme="day"] {
+  --color-bg: #ffffff;
+  --color-bg-2: #ffffff;
+  --color-panel: #ffffff;
+  --color-panel-2: #ffffff;
+  --color-fg: #000000;
+  --color-fg-dim: #2a2a2a;
+  --color-fg-muted: #5e5e5e;
+  --color-border: #000000;
+  --color-border-hi: #000000;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  color: var(--color-fg);
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  transition: background 120ms linear, color 120ms linear;
+}
+
+@layer utilities {
+  .rect {
+    background: var(--color-bg);
+    border: 1px solid var(--color-fg);
+  }
+  .rect-dim {
+    background: var(--color-bg);
+    border: 1px solid color-mix(in oklab, var(--color-fg) 35%, transparent);
+  }
+  .rect-faint {
+    background: var(--color-bg);
+    border: 1px solid color-mix(in oklab, var(--color-fg) 18%, transparent);
+  }
+  .glass {
+    background: var(--color-bg);
+    border: 1px solid var(--color-fg);
+    backdrop-filter: none;
+  }
+  .glass-hi {
+    border-color: var(--color-fg);
+  }
+  .ring-violet-glow {
+    box-shadow: none;
+  }
+  .text-grad-violet,
+  .text-grad-cyan {
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    color: var(--color-fg);
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-fg);
+    border-radius: 0;
+  }
+}
+
+/* Sharp rectangles everywhere */
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+elevenlabs-convai {
+  display: block;
+  min-height: 600px;
+}
