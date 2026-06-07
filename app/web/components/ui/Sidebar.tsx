@@ -16,6 +16,14 @@ import {
   Phone,
   LogOut,
   Sparkles,
+  Globe2,
+  Bot,
+  Volume2,
+  Megaphone,
+  Lock,
+  Power,
+  Download,
+  AlertOctagon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { createClient } from "@/lib/supabase/client";
@@ -42,6 +50,18 @@ const facilitatorNav: Item[] = [
   { href: "/dashboard/audit", label: "Audit", icon: History },
 ];
 
+const superadminNav: Item[] = [
+  { href: "/superadmin", label: "Overview", icon: Globe2 },
+  { href: "/superadmin/agents", label: "Agents", icon: Bot },
+  { href: "/superadmin/voices", label: "Voices", icon: Volume2 },
+  { href: "/superadmin/master-prompt", label: "Master prompt", icon: Megaphone },
+  { href: "/superadmin/cost", label: "Cost caps", icon: Lock },
+  { href: "/superadmin/power", label: "Power", icon: Power },
+  { href: "/superadmin/governance", label: "Governance", icon: AlertOctagon },
+  { href: "/superadmin/audit", label: "Privileged audit", icon: History },
+  { href: "/superadmin/exports", label: "Exports", icon: Download },
+];
+
 export function Sidebar({
   role,
   bypass = false,
@@ -52,7 +72,14 @@ export function Sidebar({
   const pathname = usePathname();
   const router = useRouter();
   const isStaff = role === "facilitator" || role === "superadmin";
-  const nav = bypass ? [...studentNav, ...facilitatorNav] : isStaff ? facilitatorNav : studentNav;
+  const isSuper = role === "superadmin";
+  const nav = bypass
+    ? [...studentNav, ...facilitatorNav]
+    : isSuper
+      ? superadminNav
+      : isStaff
+        ? facilitatorNav
+        : studentNav;
 
   async function signOut() {
     const supabase = createClient();
@@ -70,7 +97,7 @@ export function Sidebar({
         <div className="leading-tight">
           <div className="text-[18px] font-bold tracking-[0.15em]">IJWI</div>
           <div className="text-[10px] uppercase tracking-[0.25em] text-fg-muted">
-            {role === "superadmin" ? "Superadmin" : "Voice · Pilot"}
+            {isSuper ? "Superadmin" : role === "facilitator" ? "Facilitator" : "Voice · Pilot"}
           </div>
         </div>
       </div>
@@ -106,6 +133,15 @@ export function Sidebar({
           );
         })}
       </nav>
+
+      {isSuper && !bypass && (
+        <Link
+          href="/dashboard"
+          className="border border-fg/30 px-3 py-2 text-[10px] uppercase tracking-widest text-fg-dim hover:border-fg hover:text-fg"
+        >
+          ↓ Drill into ops
+        </Link>
+      )}
 
       <div className="mt-auto space-y-1">
         <ThemeToggle />

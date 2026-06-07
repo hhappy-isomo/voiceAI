@@ -71,21 +71,43 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    const { data: row } = await supabase
-      .from("students")
-      .select("role, suspended")
-      .eq("student_id", user.id)
-      .maybeSingle();
+    const [{ data: row }, { data: caps }] = await Promise.all([
+      supabase
+        .from("students")
+        .select("role, suspended")
+        .eq("student_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("cost_caps")
+        .select("kill_all, drain_mode")
+        .eq("id", 1)
+        .maybeSingle(),
+    ]);
     const role = (row?.role ?? "student") as
       | "student"
       | "facilitator"
       | "superadmin";
     const isStaff = role === "facilitator" || role === "superadmin";
+    const isSuper = role === "superadmin";
 
     // Suspended students lose portal access entirely.
     if (row?.suspended && !isStaff && path !== "/suspended") {
       const url = request.nextUrl.clone();
       url.pathname = "/suspended";
+      return NextResponse.redirect(url);
+    }
+
+    // Kill switch on → block students from the portal (staff still get in).
+    if (caps?.kill_all && !isStaff && path !== "/paused") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/paused";
+      return NextResponse.redirect(url);
+    }
+
+    // /superadmin/* requires superadmin role.
+    if (path.startsWith("/superadmin") && !isSuper) {
+      const url = request.nextUrl.clone();
+      url.pathname = isStaff ? "/dashboard" : "/";
       return NextResponse.redirect(url);
     }
 
