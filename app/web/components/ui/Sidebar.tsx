@@ -13,6 +13,7 @@ import {
   Activity,
   CreditCard,
   History,
+  Phone,
   LogOut,
   Sparkles,
 } from "lucide-react";
@@ -30,6 +31,7 @@ const studentNav: Item[] = [
 
 const facilitatorNav: Item[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/calls", label: "All calls", icon: Phone },
   { href: "/dashboard/sessions", label: "Sessions", icon: CalendarDays },
   { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/dashboard/live", label: "Live", icon: Activity },

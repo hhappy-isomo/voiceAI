@@ -130,16 +130,21 @@ export async function POST(req: Request) {
   const totalTokens =
     (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
   if (totalTokens > 0) {
-    await admin.from("usage_log").insert({
-      source: "anthropic",
-      units: totalTokens,
-      cost_usd: totalTokens * 0.000003,
-      meta: {
-        model: MODEL,
-        session_id: sessionId,
-        cache_read: usage.cache_read_input_tokens ?? 0,
+    await admin.from("usage_log").upsert(
+      {
+        source: "anthropic",
+        units: totalTokens,
+        cost_usd: totalTokens * 0.000003,
+        student_id: session.student_id,
+        external_id: `auto-rubric:${sessionId}`,
+        meta: {
+          model: MODEL,
+          session_id: sessionId,
+          cache_read: usage.cache_read_input_tokens ?? 0,
+        },
       },
-    });
+      { onConflict: "source,external_id" },
+    );
   }
 
   await supabase.rpc("log_audit", {
