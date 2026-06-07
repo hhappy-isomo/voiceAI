@@ -10,6 +10,9 @@ import {
   UserPlus,
   ShieldCheck,
   CalendarDays,
+  Activity,
+  CreditCard,
+  History,
   LogOut,
   Sparkles,
 } from "lucide-react";
@@ -28,9 +31,13 @@ const studentNav: Item[] = [
 const facilitatorNav: Item[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/sessions", label: "Sessions", icon: CalendarDays },
+  { href: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/dashboard/live", label: "Live", icon: Activity },
   { href: "/dashboard/staff", label: "Staff", icon: ShieldCheck },
   { href: "/dashboard/seed", label: "Seed roster", icon: UserPlus },
   { href: "/dashboard/assessments", label: "Assessments", icon: ClipboardList },
+  { href: "/dashboard/usage", label: "Usage", icon: CreditCard },
+  { href: "/dashboard/audit", label: "Audit", icon: History },
 ];
 
 export function Sidebar({

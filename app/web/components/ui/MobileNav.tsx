@@ -28,9 +28,8 @@ const studentNav: Item[] = [
 const facilitatorNav: Item[] = [
   { href: "/dashboard", label: "Dash", icon: LayoutDashboard },
   { href: "/dashboard/sessions", label: "Days", icon: CalendarDays },
+  { href: "/dashboard/live", label: "Live", icon: ClipboardList },
   { href: "/dashboard/staff", label: "Staff", icon: ShieldCheck },
-  { href: "/dashboard/seed", label: "Seed", icon: UserPlus },
-  { href: "/dashboard/assessments", label: "Tests", icon: ClipboardList },
 ];
 
 export function MobileNav({

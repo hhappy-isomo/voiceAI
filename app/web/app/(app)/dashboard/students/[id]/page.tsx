@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
 import { CohortToggle } from "@/components/CohortToggle";
 import { RoleToggle } from "@/components/RoleToggle";
+import { StudentControls } from "@/components/StudentControls";
+import { Mem0Inspector } from "@/components/Mem0Inspector";
 import { SessionsTable } from "@/components/SessionsTable";
 import type { SessionRow } from "@/components/SessionDrawer";
 import { TalkTimeWaterfall, type WaterfallBar } from "@/components/TalkTimeWaterfall";
@@ -37,6 +39,7 @@ export default async function StudentDetail({
     display_name: string | null;
     cohort: "base" | "foundation";
     role: "student" | "facilitator" | "superadmin";
+    suspended: boolean;
   };
   const me = await requireFacilitator();
   let sessions: SessionRow[] | null;
@@ -48,8 +51,8 @@ export default async function StudentDetail({
     const mockRosterMod = await import("@/lib/mock");
     const m = mockRosterMod.mockRoster.find((r) => r.student_id === id);
     student = m
-      ? { student_id: m.student_id, display_name: m.display_name, cohort: m.cohort, role: "student" }
-      : { student_id: id, display_name: "Dev Student", cohort: "base", role: "student" };
+      ? { student_id: m.student_id, display_name: m.display_name, cohort: m.cohort, role: "student", suspended: false }
+      : { student_id: id, display_name: "Dev Student", cohort: "base", role: "student", suspended: false };
     sessions = mockRosterMod.mockWaterfall
       .filter((b) => b.talk_min != null)
       .map((b, i) => ({
@@ -80,7 +83,7 @@ export default async function StudentDetail({
     const supabase = await createClient();
     const { data: studentRow } = await supabase
       .from("students")
-      .select("student_id, display_name, cohort, role, enrolled_on")
+      .select("student_id, display_name, cohort, role, enrolled_on, suspended")
       .eq("student_id", id)
       .single();
     if (!studentRow) notFound();
@@ -166,6 +169,11 @@ export default async function StudentDetail({
               selfChangeAllowed={selfChangeAllowed}
             />
             <CohortToggle studentId={id} cohort={student.cohort} />
+            <StudentControls
+              studentId={id}
+              suspended={student.suspended}
+              isSelf={id === me.student_id}
+            />
           </div>
         }
       />
@@ -173,6 +181,12 @@ export default async function StudentDetail({
       <div className="mb-5">
         <TalkTimeWaterfall bars={waterfall} />
       </div>
+
+      {!BYPASS_AUTH && (
+        <div className="mb-5">
+          <Mem0Inspector studentId={id} />
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">

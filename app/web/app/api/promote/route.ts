@@ -111,5 +111,12 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await supabase.rpc("log_audit", {
+    p_action: "role_change",
+    p_target_id: targetId,
+    p_details: { from: callerRole === "superadmin" ? null : undefined, to: requested },
+  });
+
   return NextResponse.json({ ok: true, student_id: data.student_id, role: data.role });
 }

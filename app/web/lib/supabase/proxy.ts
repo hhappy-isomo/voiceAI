@@ -73,7 +73,7 @@ export async function updateSession(request: NextRequest) {
 
     const { data: row } = await supabase
       .from("students")
-      .select("role")
+      .select("role, suspended")
       .eq("student_id", user.id)
       .maybeSingle();
     const role = (row?.role ?? "student") as
@@ -81,6 +81,13 @@ export async function updateSession(request: NextRequest) {
       | "facilitator"
       | "superadmin";
     const isStaff = role === "facilitator" || role === "superadmin";
+
+    // Suspended students lose portal access entirely.
+    if (row?.suspended && !isStaff && path !== "/suspended") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/suspended";
+      return NextResponse.redirect(url);
+    }
 
     const isFacilitatorRoute = path.startsWith(FACILITATOR_PREFIX);
     const isStudentRoot = path === "/";

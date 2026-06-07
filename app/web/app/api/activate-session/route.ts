@@ -98,6 +98,12 @@ export async function POST(req: Request) {
     })
     .eq("id", 1);
 
+  await supabase.rpc("log_audit", {
+    p_action: "session_activated",
+    p_target_id: String(sessionNo),
+    p_details: { title: session.title },
+  });
+
   return NextResponse.json({
     ok: true,
     active_session_no: sessionNo,

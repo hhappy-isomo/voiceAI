@@ -121,12 +121,38 @@ export async function POST(req: Request) {
     { onConflict: "session_id" },
   );
 
+  // Usage log for the cost meter.
+  const usage = completion.usage as {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+  const totalTokens =
+    (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+  if (totalTokens > 0) {
+    await admin.from("usage_log").insert({
+      source: "anthropic",
+      units: totalTokens,
+      cost_usd: totalTokens * 0.000003,
+      meta: {
+        model: MODEL,
+        session_id: sessionId,
+        cache_read: usage.cache_read_input_tokens ?? 0,
+      },
+    });
+  }
+
+  await supabase.rpc("log_audit", {
+    p_action: "rubric_scored",
+    p_target_id: String(sessionId),
+    p_details: { cefr: rubric.cefr, overall: rubric.overall },
+  });
+
   return NextResponse.json({
     saved: !insertErr,
     error: insertErr?.message ?? null,
     rubric,
-    cache_hit_tokens:
-      (completion.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens ?? 0,
+    cache_hit_tokens: usage.cache_read_input_tokens ?? 0,
   });
 }
 
