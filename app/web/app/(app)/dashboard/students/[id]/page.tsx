@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
 import { CohortToggle } from "@/components/CohortToggle";
+import { RoleToggle } from "@/components/RoleToggle";
 import { SessionsTable } from "@/components/SessionsTable";
 import type { SessionRow } from "@/components/SessionDrawer";
 import { TalkTimeWaterfall, type WaterfallBar } from "@/components/TalkTimeWaterfall";
@@ -29,14 +30,15 @@ export default async function StudentDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireFacilitator();
   const { id } = await params;
 
   let student!: {
     student_id: string;
     display_name: string | null;
     cohort: "base" | "foundation";
+    role: "student" | "facilitator";
   };
+  const me = await requireFacilitator();
   let sessions: SessionRow[] | null;
   let assessments: Assessment[] | null;
   let quest: Quest[] | null;
@@ -46,8 +48,8 @@ export default async function StudentDetail({
     const mockRosterMod = await import("@/lib/mock");
     const m = mockRosterMod.mockRoster.find((r) => r.student_id === id);
     student = m
-      ? { student_id: m.student_id, display_name: m.display_name, cohort: m.cohort }
-      : { student_id: id, display_name: "Dev Student", cohort: "base" };
+      ? { student_id: m.student_id, display_name: m.display_name, cohort: m.cohort, role: "student" }
+      : { student_id: id, display_name: "Dev Student", cohort: "base", role: "student" };
     sessions = mockRosterMod.mockWaterfall
       .filter((b) => b.talk_min != null)
       .map((b, i) => ({
@@ -138,7 +140,16 @@ export default async function StudentDetail({
       <TopBar
         crumbs={["Pages", "Dashboard", display]}
         title={display}
-        right={<CohortToggle studentId={id} cohort={student.cohort} />}
+        right={
+          <div className="flex items-center gap-2">
+            <RoleToggle
+              studentId={id}
+              role={student.role}
+              isSelf={id === me.student_id}
+            />
+            <CohortToggle studentId={id} cohort={student.cohort} />
+          </div>
+        }
       />
 
       <div className="mb-5">
