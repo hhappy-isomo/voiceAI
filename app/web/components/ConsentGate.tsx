@@ -6,17 +6,17 @@ import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
-export function ConsentGate({ studentId }: { studentId: string }) {
+export function ConsentGate({ studentId: _studentId }: { studentId: string }) {
   const [pending, setPending] = useState(false);
   const router = useRouter();
 
   async function agree() {
     setPending(true);
     const supabase = createClient();
-    const { error } = await supabase
-      .from("students")
-      .update({ consent_given: true, consented_at: new Date().toISOString() })
-      .eq("student_id", studentId);
+    // give_consent() runs as security definer and updates the caller's own
+    // students row (auth.uid()). Avoids needing an UPDATE RLS policy on the
+    // students table (which would risk mass-assignment of role/cohort/etc).
+    const { error } = await supabase.rpc("give_consent");
     if (error) {
       setPending(false);
       alert(error.message);
