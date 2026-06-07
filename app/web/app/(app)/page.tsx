@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { BYPASS_AUTH, getStudent, getUser } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import { ConsentGate } from "@/components/ConsentGate";
@@ -10,9 +9,10 @@ import { Mic, Flame } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default async function StudentHome() {
+  // Proxy already bounced facilitators to /dashboard, so we know the
+  // viewer is a student here (or bypass mode).
   const student = await getStudent();
 
-  if (!BYPASS_AUTH && student.role === "facilitator") redirect("/dashboard");
   if (!student.consent_given) return <ConsentGate studentId={student.student_id} />;
 
   const user = await getUser();
