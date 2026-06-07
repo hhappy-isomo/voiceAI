@@ -76,21 +76,24 @@ export async function updateSession(request: NextRequest) {
       .select("role")
       .eq("student_id", user.id)
       .maybeSingle();
-    const role = (row?.role ?? "student") as "student" | "facilitator";
+    const role = (row?.role ?? "student") as
+      | "student"
+      | "facilitator"
+      | "superadmin";
+    const isStaff = role === "facilitator" || role === "superadmin";
 
     const isFacilitatorRoute = path.startsWith(FACILITATOR_PREFIX);
     const isStudentRoot = path === "/";
 
     // Student trying to enter the facilitator portal → bounced to student home.
-    if (role === "student" && isFacilitatorRoute) {
+    if (!isStaff && isFacilitatorRoute) {
       const url = request.nextUrl.clone();
       url.pathname = STUDENT_HOME;
       return NextResponse.redirect(url);
     }
 
-    // Facilitator landing on the student portal root → sent to their dashboard.
-    // (Facilitators have no reason to view the student portal.)
-    if (role === "facilitator" && isStudentRoot) {
+    // Staff landing on the student portal root → sent to their dashboard.
+    if (isStaff && isStudentRoot) {
       const url = request.nextUrl.clone();
       url.pathname = FACILITATOR_HOME;
       return NextResponse.redirect(url);

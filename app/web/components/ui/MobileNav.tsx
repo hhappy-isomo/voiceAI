@@ -31,7 +31,7 @@ export function MobileNav({
   role,
   bypass = false,
 }: {
-  role: "student" | "facilitator";
+  role: "student" | "facilitator" | "superadmin";
   bypass?: boolean;
 }) {
   const pathname = usePathname();
@@ -43,11 +43,8 @@ export function MobileNav({
     setTheme(t === "day" ? "day" : "night");
   }, []);
 
-  const items = bypass
-    ? [...studentNav, ...facilitatorNav]
-    : role === "facilitator"
-      ? facilitatorNav
-      : studentNav;
+  const isStaff = role === "facilitator" || role === "superadmin";
+  const items = bypass ? [...studentNav, ...facilitatorNav] : isStaff ? facilitatorNav : studentNav;
 
   function toggleTheme() {
     const next = theme === "day" ? "night" : "day";

@@ -33,16 +33,13 @@ export function Sidebar({
   role,
   bypass = false,
 }: {
-  role: "student" | "facilitator";
+  role: "student" | "facilitator" | "superadmin";
   bypass?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const nav = bypass
-    ? [...studentNav, ...facilitatorNav]
-    : role === "facilitator"
-      ? facilitatorNav
-      : studentNav;
+  const isStaff = role === "facilitator" || role === "superadmin";
+  const nav = bypass ? [...studentNav, ...facilitatorNav] : isStaff ? facilitatorNav : studentNav;
 
   async function signOut() {
     const supabase = createClient();
@@ -59,7 +56,9 @@ export function Sidebar({
         </div>
         <div className="leading-tight">
           <div className="text-[18px] font-bold tracking-[0.15em]">IJWI</div>
-          <div className="text-[10px] uppercase tracking-[0.25em] text-fg-muted">Voice · Pilot</div>
+          <div className="text-[10px] uppercase tracking-[0.25em] text-fg-muted">
+            {role === "superadmin" ? "Superadmin" : "Voice · Pilot"}
+          </div>
         </div>
       </div>
 

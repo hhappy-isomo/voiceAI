@@ -3,11 +3,18 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+export type Role = "student" | "facilitator" | "superadmin";
+
+export const STAFF_ROLES: Role[] = ["facilitator", "superadmin"];
+export function isStaff(role: Role): boolean {
+  return role === "facilitator" || role === "superadmin";
+}
+
 export type StudentRow = {
   student_id: string;
   display_name: string | null;
   cohort: "base" | "foundation";
-  role: "student" | "facilitator";
+  role: Role;
   consent_given: boolean;
   enrolled_on: string;
 };
@@ -62,6 +69,12 @@ export const getStudent = cache(async (): Promise<StudentRow> => {
 
 export const requireFacilitator = cache(async () => {
   const student = await getStudent();
-  if (!BYPASS_AUTH && student.role !== "facilitator") redirect("/");
+  if (!BYPASS_AUTH && !isStaff(student.role)) redirect("/");
+  return student;
+});
+
+export const requireSuperadmin = cache(async () => {
+  const student = await getStudent();
+  if (!BYPASS_AUTH && student.role !== "superadmin") redirect("/dashboard");
   return student;
 });

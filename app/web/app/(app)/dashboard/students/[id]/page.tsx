@@ -36,7 +36,7 @@ export default async function StudentDetail({
     student_id: string;
     display_name: string | null;
     cohort: "base" | "foundation";
-    role: "student" | "facilitator";
+    role: "student" | "facilitator" | "superadmin";
   };
   const me = await requireFacilitator();
   let sessions: SessionRow[] | null;
@@ -141,11 +141,12 @@ export default async function StudentDetail({
         crumbs={["Pages", "Dashboard", display]}
         title={display}
         right={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <RoleToggle
               studentId={id}
               role={student.role}
               isSelf={id === me.student_id}
+              callerRole={me.role}
             />
             <CohortToggle studentId={id} cohort={student.cohort} />
           </div>
