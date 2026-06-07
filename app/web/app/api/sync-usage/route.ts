@@ -24,6 +24,8 @@ type EConvDetail = {
   metadata?: {
     cost?: number;
     total_cost?: number;
+    call_duration_secs?: number;
+    start_time_unix_secs?: number;
   };
 };
 
@@ -64,15 +66,21 @@ export async function POST() {
   const listJson = (await listRes.json()) as { conversations?: EConv[] };
   const convs = listJson.conversations ?? [];
 
-  // 2) For each conversation, fetch detail to get dynamic_variables (student_id).
-  //    Batched to keep this snappy.
+  // Pre-load the set of real student_ids so we can null-out FK violations
+  // (e.g. the dev-bypass placeholder UUID) before they error the upsert.
   const admin = adminClient();
+  const { data: studentRows } = await admin
+    .from("students")
+    .select("student_id");
+  const realStudentIds = new Set((studentRows ?? []).map((r) => r.student_id));
+
   let inserted = 0;
   let skipped = 0;
   let untagged = 0;
+  const errors: string[] = [];
 
   for (const c of convs) {
-    if (!c.conversation_id || !c.call_duration_secs) {
+    if (!c.conversation_id) {
       skipped++;
       continue;
     }
@@ -82,16 +90,27 @@ export async function POST() {
     );
     if (!detailRes.ok) {
       skipped++;
+      errors.push(`${c.conversation_id}: detail ${detailRes.status}`);
       continue;
     }
     const detail = (await detailRes.json()) as EConvDetail;
-    const sid =
+
+    const rawSid =
       (detail.conversation_initiation_client_data?.dynamic_variables
         ?.student_id as string | undefined) ?? null;
+    // Only attribute if the id actually exists in students. Otherwise treat
+    // as untagged (the dev-bypass placeholder, public ElevenLabs share-link
+    // hits, and stale ids all fall here.)
+    const sid = rawSid && realStudentIds.has(rawSid) ? rawSid : null;
     if (!sid) untagged++;
 
-    const dur = detail.call_duration_secs ?? c.call_duration_secs ?? 0;
-    const cost = detail.metadata?.total_cost ?? detail.metadata?.cost ?? dur * EL_COST_PER_SEC;
+    // Duration: detail top-level is often null; check metadata, then list.
+    const dur =
+      detail.call_duration_secs ??
+      detail.metadata?.call_duration_secs ??
+      c.call_duration_secs ??
+      0;
+    const cost = dur * EL_COST_PER_SEC;
 
     const { error } = await admin.from("usage_log").upsert(
       {
@@ -100,12 +119,18 @@ export async function POST() {
         cost_usd: cost,
         student_id: sid,
         external_id: c.conversation_id,
-        meta: { duration_secs: dur, message_count: c.message_count, status: c.status },
+        meta: {
+          duration_secs: dur,
+          message_count: c.message_count,
+          status: c.status,
+          raw_student_id: rawSid,
+        },
       },
       { onConflict: "source,external_id" },
     );
     if (error) {
       skipped++;
+      errors.push(`${c.conversation_id}: ${error.message}`);
     } else {
       inserted++;
     }
@@ -114,7 +139,7 @@ export async function POST() {
   await supabase.rpc("log_audit", {
     p_action: "sync_usage",
     p_target_id: null,
-    p_details: { conversations: convs.length, inserted, skipped, untagged },
+    p_details: { conversations: convs.length, inserted, skipped, untagged, errors: errors.slice(0, 5) },
   });
 
   return NextResponse.json({
@@ -123,5 +148,6 @@ export async function POST() {
     inserted,
     skipped,
     untagged,
+    errors: errors.slice(0, 5),
   });
 }
