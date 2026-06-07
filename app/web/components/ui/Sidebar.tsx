@@ -52,6 +52,7 @@ const facilitatorNav: Item[] = [
 
 const superadminNav: Item[] = [
   { href: "/superadmin", label: "Overview", icon: Globe2 },
+  { href: "/superadmin/users", label: "Users & access", icon: UserPlus },
   { href: "/superadmin/agents", label: "Agents", icon: Bot },
   { href: "/superadmin/voices", label: "Voices", icon: Volume2 },
   { href: "/superadmin/master-prompt", label: "Master prompt", icon: Megaphone },
