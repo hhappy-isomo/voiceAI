@@ -117,6 +117,22 @@ export default async function StudentDetail({
 
   const display = student.display_name ?? id.slice(0, 8);
 
+  // Allow self-role-change only if another superadmin exists, so the only
+  // remaining superadmin can never demote themselves into a lockout.
+  let selfChangeAllowed = false;
+  if (id === me.student_id && me.role === "superadmin") {
+    if (BYPASS_AUTH) {
+      selfChangeAllowed = true;
+    } else {
+      const supabase = await createClient();
+      const { count } = await supabase
+        .from("students")
+        .select("student_id", { count: "exact", head: true })
+        .eq("role", "superadmin");
+      selfChangeAllowed = (count ?? 0) > 1;
+    }
+  }
+
   const waterfall: WaterfallBar[] = BYPASS_AUTH
     ? mockWaterfall
     : Array.from({ length: 24 }, (_, i) => {
@@ -147,6 +163,7 @@ export default async function StudentDetail({
               role={student.role}
               isSelf={id === me.student_id}
               callerRole={me.role}
+              selfChangeAllowed={selfChangeAllowed}
             />
             <CohortToggle studentId={id} cohort={student.cohort} />
           </div>

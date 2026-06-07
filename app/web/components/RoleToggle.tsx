@@ -33,20 +33,24 @@ export function RoleToggle({
   role,
   isSelf,
   callerRole,
+  selfChangeAllowed = false,
 }: {
   studentId: string;
   role: Role;
   isSelf: boolean;
   callerRole: Role;
+  selfChangeAllowed?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const allowed = ALLOWED[callerRole];
+  const locked = isSelf && !selfChangeAllowed;
 
   function setRole(next: Role) {
-    if (next === role || isSelf || pending) return;
+    if (next === role || locked || pending) return;
     if (!allowed.includes(next)) return;
-    const msg = CONFIRM[`${role}->${next}`] ?? `Set role to ${next}?`;
+    let msg = CONFIRM[`${role}->${next}`] ?? `Set role to ${next}?`;
+    if (isSelf) msg = `Change YOUR OWN role to ${next}?\n\n${msg}`;
     if (!confirm(msg)) return;
     startTransition(async () => {
       const res = await fetch("/api/promote", {
@@ -65,16 +69,20 @@ export function RoleToggle({
 
   return (
     <div
-      title={isSelf ? "You can't change your own role" : "Change role"}
+      title={
+        locked
+          ? "You're the only superadmin — can't change your own role"
+          : "Change role"
+      }
       className={cn(
         "inline-flex items-stretch border border-fg/30",
-        isSelf && "opacity-60",
+        locked && "opacity-60",
       )}
     >
       {OPTIONS.map((o) => {
         const Icon = o.icon;
         const active = role === o.role;
-        const canPick = !isSelf && !pending && allowed.includes(o.role);
+        const canPick = !locked && !pending && allowed.includes(o.role);
         return (
           <button
             key={o.role}

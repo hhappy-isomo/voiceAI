@@ -49,12 +49,6 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (targetId === user.id) {
-    return NextResponse.json(
-      { error: "cannot change your own role" },
-      { status: 400 },
-    );
-  }
   if (!ALLOWED_TARGET_ROLES[callerRole].includes(requested)) {
     return NextResponse.json(
       {
@@ -62,6 +56,31 @@ export async function POST(req: Request) {
       },
       { status: 403 },
     );
+  }
+
+  // Self-role-change: allowed only if it leaves at least one other
+  // superadmin standing (so a sole superadmin can never lock themselves out).
+  if (targetId === user.id) {
+    if (callerRole !== "superadmin") {
+      return NextResponse.json(
+        { error: "only superadmin can change own role" },
+        { status: 403 },
+      );
+    }
+    const { count } = await supabase
+      .from("students")
+      .select("student_id", { count: "exact", head: true })
+      .eq("role", "superadmin");
+    const total = count ?? 0;
+    if (requested !== "superadmin" && total <= 1) {
+      return NextResponse.json(
+        {
+          error:
+            "you're the only superadmin — promote someone else first or you'll lock everyone out",
+        },
+        { status: 400 },
+      );
+    }
   }
 
   // Also block a facilitator from demoting an existing superadmin.

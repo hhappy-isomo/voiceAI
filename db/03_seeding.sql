@@ -19,13 +19,16 @@ create unique index if not exists pending_students_email_key
   on pending_students (lower(email));
 
 -- Replace the auth trigger to look up by email first.
+-- IMPORTANT: security definer functions get a stripped search_path, so all
+-- unqualified table refs MUST be schema-qualified (public.foo). Or set the
+-- search_path explicitly via `set search_path = public`.
 create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer set search_path = public as $$
 declare
-  p pending_students%rowtype;
+  p public.pending_students%rowtype;
 begin
   select * into p
-  from pending_students
+  from public.pending_students
   where lower(email) = lower(new.email)
   limit 1;
 
@@ -39,7 +42,7 @@ begin
   on conflict (student_id) do nothing;
 
   if p.id is not null then
-    delete from pending_students where id = p.id;
+    delete from public.pending_students where id = p.id;
   end if;
 
   return new;
