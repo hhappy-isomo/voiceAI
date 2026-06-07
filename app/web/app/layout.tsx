@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -25,10 +26,12 @@ export default function RootLayout({
       className={`${jakarta.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
-      </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <Script id="ijwi-theme-init" strategy="beforeInteractive">
+          {themeInit}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

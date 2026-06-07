@@ -3,6 +3,32 @@
 
 export const mockSessionsCount = 7;
 
+// Last-7-day series per dashboard KPI (for sparklines).
+export const mockSeries = {
+  avg_talk_min: [9.1, 9.8, 10.4, 10.9, 11.2, 11.6, 11.7],
+  silent_sessions: [6, 5, 5, 4, 4, 5, 4],
+  det_gain: [4.2, 4.5, 4.7, 4.9, 5.1, 5.3, 5.5],
+  ixl_gain: [6.8, 7.2, 7.6, 8.0, 8.5, 8.9, 9.1],
+  confidence_gain: [0.4, 0.46, 0.51, 0.58, 0.62, 0.67, 0.71],
+  pct_would_continue: [70, 73, 76, 80, 83, 86, 87],
+};
+
+// Per-session talk-time for the per-student waterfall.
+export const mockWaterfall = Array.from({ length: 24 }, (_, i) => {
+  const n = i + 1;
+  const done = n <= 11;
+  const dipped = n === 4 || n === 9;
+  const talk = done ? (dipped ? 7 + (n % 3) : 11 + ((n * 7) % 6)) : null;
+  return {
+    session_no: n,
+    talk_min: talk,
+    flagged: talk != null && talk < 10,
+    held_on: done
+      ? new Date(Date.now() - (12 - n) * 86400000).toISOString().slice(0, 10)
+      : null,
+  };
+});
+
 export const mockMetrics = [
   {
     cohort: "base" as const,

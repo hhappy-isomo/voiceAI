@@ -84,9 +84,9 @@ function Bar({
       <div className="text-[10px] font-bold uppercase tracking-widest text-fg-muted">
         {label}
       </div>
-      <div className="relative h-4 border border-fg/40">
+      <div className="relative h-4 border border-fg/40" title={`${label}: ${value}`}>
         <div
-          className="h-full"
+          className="anim-draw-in h-full"
           style={{
             width: `${width}%`,
             background:

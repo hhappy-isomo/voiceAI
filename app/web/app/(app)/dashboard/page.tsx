@@ -6,7 +6,7 @@ import { MetricCard } from "@/components/ui/MetricCard";
 import { RosterTable, type RosterRow } from "@/components/RosterTable";
 import { CohortBars } from "@/components/CohortBars";
 import { TodayCard, type ActivityItem, type TodayStats } from "@/components/TodayCard";
-import { mockMetrics, mockRoster, mockToday, mockActivity } from "@/lib/mock";
+import { mockMetrics, mockRoster, mockToday, mockActivity, mockSeries } from "@/lib/mock";
 import {
   Clock,
   AlertTriangle,
@@ -136,12 +136,12 @@ export default async function DashboardPage() {
       <TodayCard today={today} activity={activity} />
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricCard label="Avg talk-time" value={fmt(all.avg_talk_min, "min")} icon={Clock} />
-        <MetricCard label="Silent sessions" value={all.silent_sessions ?? 0} icon={AlertTriangle} />
-        <MetricCard label="DET gain" value={fmt(all.det_gain)} icon={TrendingUp} />
-        <MetricCard label="IXL gain" value={fmt(all.ixl_gain)} icon={Brain} />
-        <MetricCard label="Confidence gain" value={fmt(all.confidence_gain)} icon={HeartHandshake} />
-        <MetricCard label="Would continue" value={fmt(all.pct_would_continue, "%")} icon={CheckCircle2} />
+        <MetricCard label="Avg talk-time" value={fmt(all.avg_talk_min, "min")} icon={Clock} series={BYPASS_AUTH ? mockSeries.avg_talk_min : undefined} />
+        <MetricCard label="Silent sessions" value={all.silent_sessions ?? 0} icon={AlertTriangle} series={BYPASS_AUTH ? mockSeries.silent_sessions : undefined} />
+        <MetricCard label="DET gain" value={fmt(all.det_gain)} icon={TrendingUp} series={BYPASS_AUTH ? mockSeries.det_gain : undefined} />
+        <MetricCard label="IXL gain" value={fmt(all.ixl_gain)} icon={Brain} series={BYPASS_AUTH ? mockSeries.ixl_gain : undefined} />
+        <MetricCard label="Confidence gain" value={fmt(all.confidence_gain)} icon={HeartHandshake} series={BYPASS_AUTH ? mockSeries.confidence_gain : undefined} />
+        <MetricCard label="Would continue" value={fmt(all.pct_would_continue, "%")} icon={CheckCircle2} series={BYPASS_AUTH ? mockSeries.pct_would_continue : undefined} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">

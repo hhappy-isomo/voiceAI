@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
-import { requireFacilitator } from "@/lib/dal";
+import { BYPASS_AUTH, requireFacilitator } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
 import { CohortToggle } from "@/components/CohortToggle";
 import { SessionsTable } from "@/components/SessionsTable";
 import type { SessionRow } from "@/components/SessionDrawer";
+import { TalkTimeWaterfall, type WaterfallBar } from "@/components/TalkTimeWaterfall";
+import { mockWaterfall } from "@/lib/mock";
 import { Brain } from "lucide-react";
 type Assessment = {
   id: number;
@@ -29,17 +31,60 @@ export default async function StudentDetail({
 }) {
   await requireFacilitator();
   const { id } = await params;
-  const supabase = await createClient();
 
-  const { data: student } = await supabase
-    .from("students")
-    .select("student_id, display_name, cohort, role, enrolled_on")
-    .eq("student_id", id)
-    .single();
-  if (!student) notFound();
+  let student!: {
+    student_id: string;
+    display_name: string | null;
+    cohort: "base" | "foundation";
+  };
+  let sessions: SessionRow[] | null;
+  let assessments: Assessment[] | null;
+  let quest: Quest[] | null;
+  let memory: { summary: string | null; captured_on: string | null } | null;
 
-  const [{ data: sessions }, { data: assessments }, { data: quest }, { data: memory }] =
-    await Promise.all([
+  if (BYPASS_AUTH) {
+    const mockRosterMod = await import("@/lib/mock");
+    const m = mockRosterMod.mockRoster.find((r) => r.student_id === id);
+    student = m
+      ? { student_id: m.student_id, display_name: m.display_name, cohort: m.cohort }
+      : { student_id: id, display_name: "Dev Student", cohort: "base" };
+    sessions = mockRosterMod.mockWaterfall
+      .filter((b) => b.talk_min != null)
+      .map((b, i) => ({
+        id: 1000 + i,
+        session_no: b.session_no,
+        held_on: b.held_on ?? new Date().toISOString().slice(0, 10),
+        duration_seconds: (b.talk_min ?? 0) * 60 + 200,
+        student_talk_seconds: (b.talk_min ?? 0) * 60,
+        flagged_low_talk: b.flagged,
+        topic: null,
+        conversation_id: null,
+        transcript_url: null,
+        recording_url: null,
+      }));
+    assessments = [
+      { id: 1, sitting: "pre", instrument: "det", score: 70, cefr: "A2", assessed_on: "2026-05-12" },
+      { id: 2, sitting: "pre", instrument: "rubric", score: 3, cefr: "A2", assessed_on: "2026-05-12" },
+    ];
+    quest = [
+      { sitting: "pre", overall: 3.1, anxiety_reduced: 2.4, confidence: 3.0 },
+    ];
+    memory = {
+      summary:
+        "She is in Year 1 at FAWE Girls Kigali, wants to study medicine, and disagrees with the teacher about phone bans. She tells stories about her grandmother in Musanze.",
+      captured_on: new Date(Date.now() - 86400000).toISOString(),
+    };
+  } else {
+    const supabase = await createClient();
+    const { data: studentRow } = await supabase
+      .from("students")
+      .select("student_id, display_name, cohort, role, enrolled_on")
+      .eq("student_id", id)
+      .single();
+    if (!studentRow) notFound();
+    student = studentRow;
+
+    const [sRes, aRes, qRes, mRes] = await Promise.all([
       supabase
         .from("sessions")
         .select("id, session_no, held_on, duration_seconds, student_talk_seconds, flagged_low_talk, topic, conversation_id, transcript_url, recording_url")
@@ -62,8 +107,31 @@ export default async function StudentDetail({
         .limit(1)
         .maybeSingle(),
     ]);
+    sessions = sRes.data as SessionRow[] | null;
+    assessments = aRes.data as Assessment[] | null;
+    quest = qRes.data as Quest[] | null;
+    memory = mRes.data as { summary: string | null; captured_on: string | null } | null;
+  }
 
   const display = student.display_name ?? id.slice(0, 8);
+
+  const waterfall: WaterfallBar[] = BYPASS_AUTH
+    ? mockWaterfall
+    : Array.from({ length: 24 }, (_, i) => {
+        const n = i + 1;
+        const hit = (sessions as SessionRow[] | null)?.find(
+          (s) => s.session_no === n,
+        );
+        return {
+          session_no: n,
+          talk_min:
+            hit?.student_talk_seconds != null
+              ? Math.round(hit.student_talk_seconds / 60)
+              : null,
+          flagged: !!hit?.flagged_low_talk,
+          held_on: hit?.held_on ?? null,
+        };
+      });
 
   return (
     <>
@@ -72,6 +140,10 @@ export default async function StudentDetail({
         title={display}
         right={<CohortToggle studentId={id} cohort={student.cohort} />}
       />
+
+      <div className="mb-5">
+        <TalkTimeWaterfall bars={waterfall} />
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-2">
