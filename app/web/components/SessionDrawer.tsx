@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { X, Calendar, Clock, Mic, Hash, ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { X, Calendar, Clock, Mic, Hash, ExternalLink, Sparkles } from "lucide-react";
 
 export type SessionRow = {
   id: number;
@@ -139,7 +139,131 @@ export function SessionDrawer({
             </div>
           )}
         </div>
+
+        <div className="mt-5">
+          <SectionLabel>Auto-rubric (Claude)</SectionLabel>
+          <AutoRubricPanel sessionId={session.id} hasTranscript={!!session.transcript_url} />
+        </div>
       </aside>
+    </div>
+  );
+}
+
+type RubricResult = {
+  cefr: string | null;
+  overall: number | null;
+  range: number | null;
+  accuracy: number | null;
+  fluency: number | null;
+  interaction: number | null;
+  coherence: number | null;
+  rationale: string;
+};
+
+function AutoRubricPanel({
+  sessionId,
+  hasTranscript,
+}: {
+  sessionId: number;
+  hasTranscript: boolean;
+}) {
+  const [pending, setPending] = useState(false);
+  const [result, setResult] = useState<RubricResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function score() {
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auto-rubric", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? `HTTP ${res.status}`);
+      } else {
+        setResult(json.rubric);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (!hasTranscript) {
+    return (
+      <div className="mt-2 border border-dashed border-fg/30 px-4 py-6 text-center text-[11px] uppercase tracking-widest text-fg-muted">
+        Needs transcript first
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-3">
+      <button
+        onClick={score}
+        disabled={pending}
+        className="flex w-full items-center justify-center gap-2 border border-fg bg-fg px-4 py-3 text-sm font-bold uppercase tracking-wider text-bg hover:bg-bg hover:text-fg disabled:opacity-50"
+      >
+        <Sparkles className="h-4 w-4" />
+        {pending ? "Scoring…" : "Score with Claude"}
+      </button>
+      {error && (
+        <div className="border border-fg px-3 py-2 text-[11px] text-fg-dim">
+          {error}
+        </div>
+      )}
+      {result && (
+        <div className="border border-fg/30">
+          <div className="grid grid-cols-2 gap-0 border-b border-fg/20">
+            <div className="px-3 py-3">
+              <div className="text-[10px] uppercase tracking-widest text-fg-muted">CEFR</div>
+              <div className="mt-1 text-3xl font-bold uppercase tabular-nums">
+                {result.cefr ?? "—"}
+              </div>
+            </div>
+            <div className="border-l border-fg/20 px-3 py-3">
+              <div className="text-[10px] uppercase tracking-widest text-fg-muted">Overall</div>
+              <div className="mt-1 text-3xl font-bold tabular-nums">
+                {result.overall ?? "—"}
+                <span className="text-base text-fg-muted"> / 6</span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-5 gap-0 border-b border-fg/20 text-center">
+            <RScore label="Range" v={result.range} />
+            <RScore label="Acc" v={result.accuracy} borderL />
+            <RScore label="Flu" v={result.fluency} borderL />
+            <RScore label="Inter" v={result.interaction} borderL />
+            <RScore label="Coh" v={result.coherence} borderL />
+          </div>
+          {result.rationale && (
+            <div className="px-3 py-3 text-[12px] leading-relaxed">
+              {result.rationale}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RScore({
+  label,
+  v,
+  borderL,
+}: {
+  label: string;
+  v: number | null;
+  borderL?: boolean;
+}) {
+  return (
+    <div className={borderL ? "border-l border-fg/20 px-2 py-2" : "px-2 py-2"}>
+      <div className="text-[9px] uppercase tracking-widest text-fg-muted">{label}</div>
+      <div className="mt-0.5 text-base font-bold tabular-nums">{v ?? "—"}</div>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   Mic,
   ClipboardList,
   ClipboardCheck,
+  UserPlus,
   LogOut,
   Sparkles,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const studentNav: Item[] = [
 
 const facilitatorNav: Item[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/seed", label: "Seed roster", icon: UserPlus },
   { href: "/dashboard/assessments", label: "Assessments", icon: ClipboardList },
   { href: "/dashboard/questionnaire", label: "Questionnaire", icon: ClipboardCheck },
 ];

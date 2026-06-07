@@ -7,6 +7,7 @@ import {
   Mic,
   ClipboardList,
   ClipboardCheck,
+  UserPlus,
   LogOut,
   Moon,
   Sun,
@@ -21,6 +22,7 @@ const studentNav: Item[] = [{ href: "/", label: "Today", icon: Mic }];
 
 const facilitatorNav: Item[] = [
   { href: "/dashboard", label: "Dash", icon: LayoutDashboard },
+  { href: "/dashboard/seed", label: "Seed", icon: UserPlus },
   { href: "/dashboard/assessments", label: "Tests", icon: ClipboardList },
   { href: "/dashboard/questionnaire", label: "Survey", icon: ClipboardCheck },
 ];
