@@ -61,7 +61,7 @@ export function ExportsPanel({
             onClick={() =>
               download(
                 `/api/superadmin/export?student_id=${encodeURIComponent(studentId)}`,
-                `ijwi-student-${studentId.slice(0, 8)}.json`,
+                `isomo-student-${studentId.slice(0, 8)}.json`,
                 "g",
               )
             }
@@ -87,7 +87,7 @@ export function ExportsPanel({
           onClick={() =>
             download(
               `/api/superadmin/export?anon=1`,
-              `ijwi-anon-${new Date().toISOString().slice(0, 10)}.json`,
+              `isomo-anon-${new Date().toISOString().slice(0, 10)}.json`,
               "a",
             )
           }
