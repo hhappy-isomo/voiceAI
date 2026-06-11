@@ -10,7 +10,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Ijwi",
+  title: "Isomo",
   description: "Your English speaking partner.",
 };
 

@@ -36,7 +36,7 @@ export function ConsentGate({ studentId: _studentId }: { studentId: string }) {
             <h2 className="text-3xl font-bold tracking-tight uppercase">Before we start</h2>
             <p className="text-fg-dim leading-relaxed">
               I&apos;m happy to practice English with the AI tutor. I understand
-              my sessions are recorded to help me improve and to help Ijwi
+              my sessions are recorded to help me improve and to help Isomo
               build and improve its educational tools.
             </p>
           </div>

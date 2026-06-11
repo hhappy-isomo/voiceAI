@@ -32,7 +32,7 @@ export default function LoginPage() {
           </div>
           <div className="space-y-2">
             <h1 className="text-5xl font-bold tracking-[0.05em] uppercase">
-              Ijwi
+              Isomo
             </h1>
             <p className="text-sm uppercase tracking-[0.2em] text-fg-dim">
               Your English speaking partner
