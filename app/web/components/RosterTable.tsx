@@ -63,7 +63,7 @@ export function RosterTable({ rows }: { rows: RosterRow[] }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `isomo-roster-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `isomo-voice-roster-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
