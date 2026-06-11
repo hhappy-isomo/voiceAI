@@ -96,9 +96,9 @@ export function Sidebar({
           <Sparkles className="h-4 w-4 text-fg" />
         </div>
         <div className="leading-tight">
-          <div className="text-[18px] font-bold tracking-[0.15em]">ISOMO</div>
+          <div className="text-[15px] font-bold tracking-[0.12em] whitespace-nowrap">ISOMO VOICE</div>
           <div className="text-[10px] uppercase tracking-[0.25em] text-fg-muted">
-            {isSuper ? "Superadmin" : role === "facilitator" ? "Facilitator" : "Voice · Pilot"}
+            {isSuper ? "Superadmin" : role === "facilitator" ? "Facilitator" : "Pilot"}
           </div>
         </div>
       </div>

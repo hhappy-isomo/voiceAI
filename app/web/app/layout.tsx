@@ -10,7 +10,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Isomo",
+  title: "Isomo Voice",
   description: "Your English speaking partner.",
 };
 

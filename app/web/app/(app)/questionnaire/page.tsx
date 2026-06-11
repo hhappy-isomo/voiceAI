@@ -41,7 +41,7 @@ export default async function QuestionnairePage({
   return (
     <>
       <TopBar
-        crumbs={["Isomo", "Survey"]}
+        crumbs={["Isomo Voice", "Survey"]}
         title={sitting === "pre" ? "Before we start" : "How was it?"}
       />
 
@@ -60,7 +60,7 @@ export default async function QuestionnairePage({
               Both surveys done.
             </div>
             <div className="max-w-md text-fg-dim leading-relaxed">
-              Thank you. Your responses help Isomo see how you&apos;ve grown.
+              Thank you. Your responses help Isomo Voice see how you&apos;ve grown.
             </div>
           </div>
         </Card>

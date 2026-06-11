@@ -31,8 +31,8 @@ export default function LoginPage() {
             <Sparkles className="h-6 w-6 text-fg" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-5xl font-bold tracking-[0.05em] uppercase">
-              Isomo
+            <h1 className="text-5xl font-bold tracking-[0.05em] uppercase leading-[1]">
+              Isomo<br />Voice
             </h1>
             <p className="text-sm uppercase tracking-[0.2em] text-fg-dim">
               Your English speaking partner
