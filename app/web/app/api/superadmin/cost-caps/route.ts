@@ -9,13 +9,25 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString(), updated_by: guard.userId };
+
+  function parseCap(field: string, raw: unknown): number | null | string {
+    if (raw === "" || raw == null) return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return `${field} must be a number`;
+    if (n < 0)              return `${field} must be ≥ 0`;
+    if (n > 1_000_000)      return `${field} must be ≤ $1,000,000`;
+    return n;
+  }
+
   if ("monthly_ceiling_usd" in body) {
-    const v = body.monthly_ceiling_usd;
-    patch.monthly_ceiling_usd = v === "" || v == null ? null : Number(v);
+    const v = parseCap("monthly_ceiling_usd", body.monthly_ceiling_usd);
+    if (typeof v === "string") return NextResponse.json({ error: v }, { status: 400 });
+    patch.monthly_ceiling_usd = v;
   }
   if ("per_student_cap_usd" in body) {
-    const v = body.per_student_cap_usd;
-    patch.per_student_cap_usd = v === "" || v == null ? null : Number(v);
+    const v = parseCap("per_student_cap_usd", body.per_student_cap_usd);
+    if (typeof v === "string") return NextResponse.json({ error: v }, { status: 400 });
+    patch.per_student_cap_usd = v;
   }
   if ("drain_mode" in body) patch.drain_mode = !!body.drain_mode;
   if ("kill_all" in body) patch.kill_all = !!body.kill_all;
