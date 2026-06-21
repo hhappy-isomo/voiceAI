@@ -5,6 +5,25 @@ webhook signing secret live only in `~/.isomo/voiceai.env` (chmod 600, never com
 
 _Last updated: 2026-06-06._
 
+## Migration order (read before any deploy)
+
+The SQL files in `db/` are numbered. **Always apply migrations before
+deploying the app or webhook that depends on them**, never after.
+
+The trap: `db/11_audit_fixes.sql` replaces `sessions.flagged_low_talk`
+(generated column → regular column) and the webhook starts writing the
+field explicitly. If the new webhook ships first, every insert fails
+("cannot insert into generated column"). If the old webhook is still
+running when the migration lands, the column is empty until the next
+call. Order is:
+
+  1. Apply pending `db/NN_*.sql` migrations in numerical order
+  2. Deploy webhook (`supabase functions deploy elevenlabs-postcall`)
+  3. Deploy app
+
+The same rule applies to any future migration that touches a column
+the app or webhook reads or writes.
+
 ## Supabase (project `buuyfdjpupolvvocdzna`)
 - URL: `https://buuyfdjpupolvvocdzna.supabase.co`
 - Schema + auth migrations: **applied** (`db/01_schema.sql`, `db/02_auth.sql`)
