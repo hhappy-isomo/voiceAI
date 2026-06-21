@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
 import { RUBRIC_SYSTEM, parseRubric } from "@/lib/rubric";
 import { checkBudget } from "@/lib/cost-guard";
+import { checkSameOrigin } from "@/lib/csrf";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -35,6 +36,8 @@ function isAllowedTranscriptUrl(url: string): boolean {
 }
 
 export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const supabase = await createServerClient();
   const {
     data: { user },

@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { SESSIONS } from "@/lib/sessions-data";
+import { checkSameOrigin } from "@/lib/csrf";
 
 const AGENT_ID =
   process.env.ELEVENLABS_AGENT_ID ??
   process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID;
 
 export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const supabase = await createServerClient();
   const {
     data: { user },

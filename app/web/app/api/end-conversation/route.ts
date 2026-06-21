@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { checkSameOrigin } from "@/lib/csrf";
 
 // Best-effort end. ElevenLabs Convai doesn't expose a "kill active session"
 // API — the browser holds the websocket. We can DELETE the conversation
 // record (post-fact cleanup) but cannot force-terminate a live call.
 
 export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const supabase = await createServerClient();
   const {
     data: { user },
