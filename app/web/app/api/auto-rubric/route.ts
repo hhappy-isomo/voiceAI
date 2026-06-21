@@ -4,16 +4,10 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
 import { RUBRIC_SYSTEM, parseRubric } from "@/lib/rubric";
 import { checkBudget } from "@/lib/cost-guard";
+import { computeAnthropicCost, type Usage } from "@/lib/anthropic-cost";
 import { checkSameOrigin } from "@/lib/csrf";
 
 const MODEL = "claude-sonnet-4-6";
-
-// Claude Sonnet 4.6 token pricing (USD per token). Update when pricing changes.
-// Cache writes are 1.25x input; cache reads are 0.1x input.
-const PRICE_IN  = 3e-6;     // $3 per Mtok
-const PRICE_OUT = 15e-6;    // $15 per Mtok
-const PRICE_CACHE_READ  = PRICE_IN * 0.1;
-const PRICE_CACHE_WRITE = PRICE_IN * 1.25;
 
 // SSRF guard: only fetch transcripts from ElevenLabs-controlled hosts.
 const TRANSCRIPT_HOST_ALLOWLIST = [
@@ -166,24 +160,8 @@ export async function POST(req: Request) {
     { onConflict: "session_id" },
   );
 
-  // Real per-token cost: split input vs output vs cached.
-  const usage = completion.usage as {
-    input_tokens?: number;
-    output_tokens?: number;
-    cache_read_input_tokens?: number;
-    cache_creation_input_tokens?: number;
-  };
-  const inTok    = usage.input_tokens ?? 0;
-  const outTok   = usage.output_tokens ?? 0;
-  const readTok  = usage.cache_read_input_tokens ?? 0;
-  const writeTok = usage.cache_creation_input_tokens ?? 0;
-  // input_tokens excludes both cached counts on Anthropic's API.
-  const cost =
-    inTok    * PRICE_IN +
-    outTok   * PRICE_OUT +
-    readTok  * PRICE_CACHE_READ +
-    writeTok * PRICE_CACHE_WRITE;
-  const totalTokens = inTok + outTok + readTok + writeTok;
+  const { cost, totalTokens, inTok, outTok, readTok, writeTok } =
+    computeAnthropicCost(completion.usage as Usage);
 
   if (totalTokens > 0) {
     await admin.from("usage_log").upsert(
