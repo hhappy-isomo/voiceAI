@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { signRecordingPaths } from "@/lib/recordings";
 import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
-import { CallsTable, type CallRow } from "./CallsTable";
+import { CallsTable, type CallRow, type SafetyFlag } from "./CallsTable";
 
 export default async function CallsPage() {
   await requireFacilitator();
@@ -15,7 +15,7 @@ export default async function CallsPage() {
     const { data: sessions } = await supabase
       .from("sessions")
       .select(
-        "id, student_id, session_no, held_on, duration_seconds, student_talk_seconds, flagged_low_talk, topic, conversation_id, transcript_url, recording_url",
+        "id, student_id, session_no, held_on, duration_seconds, student_talk_seconds, flagged_low_talk, safety_severity, topic, conversation_id, transcript_url, recording_url",
       )
       .order("held_on", { ascending: false })
       .order("id", { ascending: false })
@@ -24,7 +24,7 @@ export default async function CallsPage() {
     const ids = (sessions ?? []).map((s) => s.id);
     const studentIds = [...new Set((sessions ?? []).map((s) => s.student_id))];
 
-    const [rubricRes, studentsRes, memRes] = await Promise.all([
+    const [rubricRes, studentsRes, memRes, flagsRes] = await Promise.all([
       ids.length
         ? supabase
             .from("auto_rubric_scores")
@@ -43,6 +43,12 @@ export default async function CallsPage() {
             .select("student_id, summary, captured_on")
             .in("student_id", studentIds)
             .order("captured_on", { ascending: false })
+        : Promise.resolve({ data: [] }),
+      ids.length
+        ? supabase
+            .from("transcript_flags")
+            .select("session_id, severity, snippet")
+            .in("session_id", ids)
         : Promise.resolve({ data: [] }),
     ]);
 
@@ -75,6 +81,18 @@ export default async function CallsPage() {
       memByStudent.set(m.student_id, arr);
     }
 
+    // Group transcript_flags by session_id for O(1) lookup per row.
+    const flagsBySession = new Map<number, SafetyFlag[]>();
+    for (const f of (flagsRes.data ?? []) as Array<{
+      session_id: number;
+      severity: "warn" | "flag" | "block";
+      snippet: string | null;
+    }>) {
+      const arr = flagsBySession.get(f.session_id) ?? [];
+      arr.push({ severity: f.severity, snippet: f.snippet });
+      flagsBySession.set(f.session_id, arr);
+    }
+
     // Recordings live in a PRIVATE storage bucket — sessions.recording_url
     // stores the path, and we mint a short-lived signed URL per render so
     // student audio is never reachable via a permanent public URL.
@@ -97,6 +115,9 @@ export default async function CallsPage() {
         duration_seconds: s.duration_seconds,
         student_talk_seconds: s.student_talk_seconds,
         flagged_low_talk: !!s.flagged_low_talk,
+        safety_severity: (s.safety_severity ?? null) as
+          | "clean" | "warn" | "flag" | "block" | null,
+        safety_flags: flagsBySession.get(s.id) ?? [],
         topic: s.topic,
         conversation_id: s.conversation_id,
         transcript_url: s.transcript_url,

@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Calendar, Clock, Mic, Hash, ExternalLink, Sparkles } from "lucide-react";
+import { X, Calendar, Clock, Mic, Hash, ExternalLink, Sparkles, ShieldAlert } from "lucide-react";
+
+export type SafetyFlag = {
+  severity: "warn" | "flag" | "block";
+  snippet: string | null;
+};
 
 export type SessionRow = {
   id: number;
@@ -10,6 +15,8 @@ export type SessionRow = {
   duration_seconds: number | null;
   student_talk_seconds: number | null;
   flagged_low_talk: boolean | null;
+  safety_severity?: "clean" | "warn" | "flag" | "block" | null;
+  safety_flags?: SafetyFlag[];
   topic: string | null;
   conversation_id?: string | null;
   transcript_url?: string | null;
@@ -104,6 +111,38 @@ export function SessionDrawer({
             } />
           )}
         </dl>
+
+        {(session.safety_severity === "warn" ||
+          session.safety_severity === "flag" ||
+          session.safety_severity === "block") && (
+          <div className="mt-5">
+            <SectionLabel>
+              <ShieldAlert className="mr-1 inline h-3 w-3" />
+              Safety scan · {session.safety_severity.toUpperCase()}
+            </SectionLabel>
+            {session.safety_flags && session.safety_flags.length > 0 ? (
+              <ul className="mt-2 space-y-2">
+                {session.safety_flags.map((f, i) => (
+                  <li
+                    key={i}
+                    className="border border-fg/30 px-3 py-2 text-[12px] leading-relaxed"
+                  >
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-fg-muted">
+                      {f.severity}
+                    </div>
+                    <div className="mt-1 text-fg-dim italic">
+                      {f.snippet ? `…${f.snippet}…` : "(no snippet)"}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-2 border border-dashed border-fg/30 px-4 py-3 text-[11px] uppercase tracking-widest text-fg-muted">
+                Severity recorded; no individual hits stored
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-5">
           <SectionLabel>Recording</SectionLabel>
