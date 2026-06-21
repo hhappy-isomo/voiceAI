@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
 import { checkBudget } from "@/lib/cost-guard";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 // Fallback ElevenLabs Conversational AI cost per second, used only when the
 // detail response omits metadata.cost. (Creator tier ≈ $0.08–0.10/min.)
@@ -49,6 +50,12 @@ export async function POST() {
   // Kill switch still applies to sync (it touches the ElevenLabs API);
   // drain_mode does not — sync just records what already happened.
   const adminEarly = adminClient();
+
+  // Rate limit: 5 syncs per minute globally. Stops accidental refresh
+  // hammering and keeps us well under ElevenLabs' API limits.
+  const rl = await rateLimit(adminEarly, "sync-usage:global", 5, 60);
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   const guard = await checkBudget(adminEarly);
   if (!guard.ok && guard.reason === "kill_all") {
     return NextResponse.json(

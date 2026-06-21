@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
 import { RUBRIC_SYSTEM, parseRubric } from "@/lib/rubric";
 import { checkBudget } from "@/lib/cost-guard";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -91,6 +92,12 @@ export async function POST(req: Request) {
   }
 
   const admin = adminClient();
+
+  // Rate limit: 20 rubric runs per facilitator per 5 minutes. Cost cap
+  // is the hard ceiling; this just stops a runaway loop from blowing
+  // through it in a single second.
+  const rl = await rateLimit(admin, `auto-rubric:${user.id}`, 20, 300);
+  if (!rl.allowed) return rateLimitResponse(rl);
 
   // Cost cap pre-flight. Estimate one Sonnet call ~ $0.05 worst case.
   const guard = await checkBudget(admin, {
