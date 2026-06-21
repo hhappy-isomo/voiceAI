@@ -80,7 +80,7 @@ async function mem0Summary(studentId: string): Promise<string | null> {
   if (!MEM0_API_KEY) return null;
   try {
     const r = await fetch(
-      `https://api.mem0.ai/v1/memories?user_id=${encodeURIComponent(studentId)}`,
+      `https://api.mem0.ai/v1/memories/?user_id=${encodeURIComponent(studentId)}`,
       {
         headers: { Authorization: `Token ${MEM0_API_KEY}` },
         signal: AbortSignal.timeout(5000),
