@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
+import { checkSameOrigin } from "@/lib/csrf";
 
 export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -47,7 +50,7 @@ export async function POST(req: Request) {
   let mem0Status: number | null = null;
   if (process.env.MEM0_API_KEY) {
     const r = await fetch(
-      `https://api.mem0.ai/v1/memories?user_id=${encodeURIComponent(targetId)}`,
+      `https://api.mem0.ai/v1/memories/?user_id=${encodeURIComponent(targetId)}`,
       {
         method: "DELETE",
         headers: { Authorization: `Token ${process.env.MEM0_API_KEY}` },

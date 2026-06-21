@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSuperadminApi } from "@/lib/superadmin-guard";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { checkSameOrigin } from "@/lib/csrf";
 
 const EL = "https://api.elevenlabs.io/v1/convai/agents";
 
@@ -20,6 +21,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const guard = await requireSuperadminApi();
   if (!guard.ok) return guard.response;
   if (!process.env.ELEVENLABS_API_KEY) {
@@ -71,6 +74,8 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const guard = await requireSuperadminApi();
   if (!guard.ok) return guard.response;
   if (!process.env.ELEVENLABS_API_KEY) {
@@ -116,6 +121,8 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const guard = await requireSuperadminApi();
   if (!guard.ok) return guard.response;
   if (!process.env.ELEVENLABS_API_KEY) {

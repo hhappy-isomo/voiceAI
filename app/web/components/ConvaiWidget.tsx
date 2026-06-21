@@ -30,8 +30,15 @@ export function ConvaiWidget({
   return (
     <>
       <div ref={hostRef} />
+      {/* Pinned + SRI-locked. Children join voice calls; if unpkg ever
+          serves a tampered bundle the browser refuses to run it.
+          Bumping the version means recomputing the integrity hash:
+            curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
+      */}
       <Script
-        src="https://unpkg.com/@elevenlabs/convai-widget-embed"
+        src="https://unpkg.com/@elevenlabs/convai-widget-embed@0.14.4/dist/index.js"
+        integrity="sha384-nZO9GQJlx3wPcYC/v9paE+aktIIUioukEuVdOKOMC9H7vHSmjqbR9/lZnrHQztzO"
+        crossOrigin="anonymous"
         strategy="afterInteractive"
         async
       />
