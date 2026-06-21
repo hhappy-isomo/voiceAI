@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
+import { adminClient } from "@/lib/admin";
 
 type Role = "student" | "facilitator" | "superadmin";
 
@@ -10,7 +10,8 @@ const ALLOWED_TARGET_ROLES: Record<Role, Role[]> = {
   // Facilitators can flip between student and facilitator only — they can
   // neither create nor demote a superadmin.
   facilitator: ["student", "facilitator"],
-  // Superadmins can set any role on anyone (except themselves).
+  // Superadmins can set any role on anyone (except themselves losing the
+  // only superadmin slot — enforced atomically in safe_set_role()).
   superadmin: ["student", "facilitator", "superadmin"],
 };
 
@@ -51,39 +52,18 @@ export async function POST(req: Request) {
   }
   if (!ALLOWED_TARGET_ROLES[callerRole].includes(requested)) {
     return NextResponse.json(
-      {
-        error: `${callerRole} cannot set role to ${requested}`,
-      },
+      { error: `${callerRole} cannot set role to ${requested}` },
+      { status: 403 },
+    );
+  }
+  if (targetId === user.id && callerRole !== "superadmin") {
+    return NextResponse.json(
+      { error: "only superadmin can change own role" },
       { status: 403 },
     );
   }
 
-  // Self-role-change: allowed only if it leaves at least one other
-  // superadmin standing (so a sole superadmin can never lock themselves out).
-  if (targetId === user.id) {
-    if (callerRole !== "superadmin") {
-      return NextResponse.json(
-        { error: "only superadmin can change own role" },
-        { status: 403 },
-      );
-    }
-    const { count } = await supabase
-      .from("students")
-      .select("student_id", { count: "exact", head: true })
-      .eq("role", "superadmin");
-    const total = count ?? 0;
-    if (requested !== "superadmin" && total <= 1) {
-      return NextResponse.json(
-        {
-          error:
-            "you're the only superadmin — promote someone else first or you'll lock everyone out",
-        },
-        { status: 400 },
-      );
-    }
-  }
-
-  // Also block a facilitator from demoting an existing superadmin.
+  // Facilitators can't touch a superadmin.
   if (callerRole === "facilitator") {
     const { data: target } = await supabase
       .from("students")
@@ -98,25 +78,44 @@ export async function POST(req: Request) {
     }
   }
 
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } },
-  );
-  const { data, error } = await admin
-    .from("students")
-    .update({ role: requested })
-    .eq("student_id", targetId)
-    .select("student_id, role")
-    .single();
+  // Atomic role change. The RPC:
+  //   - checks that demoting the last superadmin can't lock everyone out
+  //     (no read-then-write race even with concurrent callers),
+  //   - returns the previous role so we can record a meaningful audit row.
+  const admin = adminClient();
+  const { data, error } = await admin.rpc("safe_set_role", {
+    p_target: targetId,
+    p_new_role: requested,
+  });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // P0001 is "cannot remove last superadmin"; surface that as 400.
+    if (error.code === "P0001") {
+      return NextResponse.json(
+        { error: "you're the only superadmin — promote someone else first" },
+        { status: 400 },
+      );
+    }
+    if (error.code === "P0002") {
+      return NextResponse.json({ error: "student not found" }, { status: 404 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  const fromRole = row?.from_role ?? null;
+  const toRole = row?.to_role ?? requested;
 
   await supabase.rpc("log_audit", {
     p_action: "role_change",
     p_target_id: targetId,
-    p_details: { from: callerRole === "superadmin" ? null : undefined, to: requested },
+    p_details: { from: fromRole, to: toRole },
   });
 
-  return NextResponse.json({ ok: true, student_id: data.student_id, role: data.role });
+  return NextResponse.json({
+    ok: true,
+    student_id: targetId,
+    from: fromRole,
+    role: toRole,
+  });
 }
