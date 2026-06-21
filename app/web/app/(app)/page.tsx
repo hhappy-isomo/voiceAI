@@ -8,6 +8,7 @@ import { mockSessionsCount } from "@/lib/mock";
 import { Mic, Flame, Brain } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
+import { humanizeMemory } from "@/lib/humanize-memory";
 
 export default async function StudentHome() {
   // Proxy already bounced facilitators to /dashboard, so we know the
@@ -162,7 +163,7 @@ export default async function StudentHome() {
 
             {lastMemory?.summary ? (
               <p className="text-sm leading-relaxed text-fg whitespace-pre-wrap">
-                {lastMemory.summary}
+                {humanizeMemory(lastMemory.summary, firstName)}
               </p>
             ) : (
               <div className="text-sm text-fg-dim">

@@ -1,8 +1,9 @@
-import { BYPASS_AUTH, getStudent } from "@/lib/dal";
+import { BYPASS_AUTH, getStudent, getUser } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
 import { Brain, Calendar, Clock } from "lucide-react";
+import { humanizeMemory } from "@/lib/humanize-memory";
 
 type Session = {
   id: number;
@@ -18,6 +19,11 @@ type Memory = { summary: string | null; captured_on: string };
 export default async function StoryPage() {
   // Proxy already enforces student-only access for this route group.
   const student = await getStudent();
+  const user = await getUser();
+  const firstName =
+    (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
+    student.display_name?.split(" ")[0] ??
+    null;
 
   let sessions: Session[] = [];
   let memories: Memory[] = [];
@@ -58,7 +64,7 @@ export default async function StoryPage() {
           {latestMemory?.summary ? (
             <>
               <p className="text-sm leading-relaxed text-fg whitespace-pre-wrap">
-                {latestMemory.summary}
+                {humanizeMemory(latestMemory.summary, firstName)}
               </p>
               <div className="mt-3 text-[11px] uppercase tracking-widest text-fg-muted">
                 Captured {formatDate(latestMemory.captured_on)}
@@ -82,7 +88,7 @@ export default async function StoryPage() {
               <span className="ml-1 text-2xl text-fg-muted">/ 24</span>
             </div>
             <div className="text-[11px] uppercase tracking-widest text-fg-dim">
-              {totalTalkMinutes(sessions)} minutes of you, talking
+              {plural(totalTalkMinutes(sessions), "minute", "minutes")} of you, talking
             </div>
           </div>
         </Card>
@@ -120,7 +126,7 @@ export default async function StoryPage() {
                     {s.student_talk_seconds != null && (
                       <span className="inline-flex items-center gap-1 text-[12px] text-fg-dim tabular-nums">
                         <Clock className="h-3 w-3" />
-                        {Math.round(s.student_talk_seconds / 60)} min of talk
+                        {plural(Math.round(s.student_talk_seconds / 60), "min", "min")} of talk
                       </span>
                     )}
                   </div>
@@ -158,4 +164,8 @@ function totalTalkMinutes(sessions: Session[]): number {
     0,
   );
   return Math.round(total / 60);
+}
+
+function plural(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
 }
