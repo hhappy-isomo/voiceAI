@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Mic,
+  BookOpen,
   ClipboardList,
   ClipboardCheck,
   UserPlus,
@@ -33,6 +34,7 @@ type Item = { href: string; label: string; icon: React.ComponentType<{ className
 
 const studentNav: Item[] = [
   { href: "/", label: "Today", icon: Mic },
+  { href: "/story", label: "Story", icon: BookOpen },
   { href: "/questionnaire", label: "Survey", icon: ClipboardCheck },
 ];
 

@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
 import { ConvaiWidget } from "@/components/ConvaiWidget";
 import { mockSessionsCount } from "@/lib/mock";
-import { Mic, Flame } from "lucide-react";
+import { Mic, Flame, Brain } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/cn";
 
 export default async function StudentHome() {
@@ -22,15 +23,35 @@ export default async function StudentHome() {
     "friend";
 
   let sessionsDone: number;
+  let lastMemory: { summary: string | null; captured_on: string | null } | null = null;
+  let lastSession: { held_on: string; topic: string | null; session_no: number | null } | null = null;
   if (BYPASS_AUTH) {
     sessionsDone = mockSessionsCount;
   } else {
     const supabase = await createClient();
-    const { count } = await supabase
-      .from("sessions")
-      .select("*", { count: "exact", head: true })
-      .eq("student_id", student.student_id);
-    sessionsDone = count ?? 0;
+    const [countRes, memRes, sessRes] = await Promise.all([
+      supabase
+        .from("sessions")
+        .select("*", { count: "exact", head: true })
+        .eq("student_id", student.student_id),
+      supabase
+        .from("memory_snapshots")
+        .select("summary, captured_on")
+        .eq("student_id", student.student_id)
+        .order("captured_on", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("sessions")
+        .select("held_on, topic, session_no")
+        .eq("student_id", student.student_id)
+        .order("held_on", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    sessionsDone = countRes.count ?? 0;
+    lastMemory = memRes.data;
+    lastSession = sessRes.data;
   }
   const day = Math.min(sessionsDone + 1, 24);
 
@@ -112,6 +133,58 @@ export default async function StudentHome() {
           )}
         </Card>
       </div>
+
+      {(lastMemory?.summary || lastSession) && (
+        <div className="mt-5">
+          <Card>
+            <div className="mb-4 flex items-center justify-between border-b border-fg/20 pb-3">
+              <div className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-fg" />
+                <div className="text-sm font-bold uppercase tracking-[0.2em]">
+                  Last time we talked
+                </div>
+              </div>
+              <Link
+                href="/story"
+                className="text-[10px] uppercase tracking-widest text-fg-dim underline-offset-4 hover:underline hover:text-fg"
+              >
+                See all →
+              </Link>
+            </div>
+
+            {lastSession && (
+              <div className="mb-3 text-[11px] uppercase tracking-widest text-fg-muted">
+                {lastSession.session_no ? `Day ${lastSession.session_no} · ` : ""}
+                {formatDate(lastSession.held_on)}
+                {lastSession.topic ? ` · ${lastSession.topic}` : ""}
+              </div>
+            )}
+
+            {lastMemory?.summary ? (
+              <p className="text-sm leading-relaxed text-fg whitespace-pre-wrap">
+                {lastMemory.summary}
+              </p>
+            ) : (
+              <div className="text-sm text-fg-dim">
+                Your AI partner is still getting to know you. Come back after your next call.
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
     </>
   );
+}
+
+function formatDate(d: string | null): string {
+  if (!d) return "";
+  try {
+    return new Date(d).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return d;
+  }
 }
