@@ -96,18 +96,52 @@ async function mem0Summary(studentId: string): Promise<string | null> {
   }
 }
 
+// Look up the student's first name so Mem0's extractor can store
+// natural-language facts ("Happy went bowling") instead of generic
+// "User went bowling". display_name is facilitator-side PII; we use
+// only the first word and only pass it inside Mem0.
+async function fetchStudentFirstName(studentId: string): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from("students")
+      .select("display_name")
+      .eq("student_id", studentId)
+      .maybeSingle();
+    const full = (data?.display_name as string | null | undefined)?.trim();
+    if (!full) return null;
+    return full.split(/\s+/)[0];
+  } catch (_e) {
+    return null;
+  }
+}
+
 // Write the conversation into Mem0 so the student's memory grows each session.
 async function mem0Add(studentId: string, transcript: any[]): Promise<void> {
   if (!MEM0_API_KEY) return;
+  const firstName = await fetchStudentFirstName(studentId);
   const messages = transcript
     .filter((t) => t?.message)
-    .map((t) => ({ role: t.role === "agent" ? "assistant" : "user", content: t.message }));
+    .map((t) => {
+      const role = t.role === "agent" ? "assistant" : "user";
+      // Prefix the student's name on their utterances so Mem0 extracts
+      // facts under the right subject. Falls back to plain content when
+      // we have no name on file.
+      const content =
+        role === "user" && firstName ? `${firstName}: ${t.message}` : t.message;
+      return { role, content };
+    });
   if (!messages.length) return;
   try {
     await fetch("https://api.mem0.ai/v1/memories/", {
       method: "POST",
       headers: { Authorization: `Token ${MEM0_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, user_id: studentId }),
+      body: JSON.stringify({
+        messages,
+        user_id: studentId,
+        // metadata is preserved on every memory Mem0 extracts from this
+        // batch; the recall path can use it when summarising for the agent.
+        ...(firstName ? { metadata: { name: firstName } } : {}),
+      }),
       signal: AbortSignal.timeout(5000),
     });
   } catch (_e) { /* best-effort */ }
