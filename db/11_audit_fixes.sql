@@ -1,17 +1,8 @@
 -- =====================================================================
--- ISOMO / IJWI — Audit fixes (#1, #2, #5, #9, #12, #13, #14, +cefr check).
--- Run AFTER 10_superadmin_layer.sql.
---
--- Covers:
---   #1  Define get_pilot_status() — the proxy already calls it
---   #2  Add unique(source, external_id) on usage_log so upserts work
---   #5  handle_new_user() stops falling back to email for display_name
---   #9  safe_set_role() — atomic role change with last-superadmin guard
---   #12 safe_set_role() returns from_role/to_role for the audit log
---   #13 Index memory_snapshots(student_id, captured_on desc)
---   #14 low_talk_threshold_secs on pilot_config; sessions.flagged_low_talk
---       is no longer a hard-coded generated column
---   bonus: assessments.cefr check constraint
+-- ISOMO / IJWI — Audit fixes (patched for view-dependency).
+-- Same content as db/11_audit_fixes.sql, with the view-dependency
+-- handling fixed (drops + recreates v_student_progress and v_pilot_metrics
+-- around the flagged_low_talk column rebuild).
 -- =====================================================================
 
 -- ---- #1: kill-switch / drain RPC for middleware ----------------------
@@ -25,14 +16,17 @@ $$;
 grant execute on function public.get_pilot_status() to authenticated;
 
 -- ---- #2: usage_log upserts need a unique constraint ------------------
-alter table public.usage_log
-  drop constraint if exists usage_log_source_external_key;
-alter table public.usage_log
-  add  constraint usage_log_source_external_key unique (source, external_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'usage_log_source_external_key'
+  ) then
+    alter table public.usage_log
+      add constraint usage_log_source_external_key unique (source, external_id);
+  end if;
+end $$;
 
 -- ---- #5: don't put email into display_name ---------------------------
--- Replaces the trigger function defined in 03_seeding.sql. Falls back to
--- the pending-row name, then to Google full_name, then NULL — never email.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
@@ -49,7 +43,7 @@ begin
   insert into public.students (student_id, display_name, role, cohort)
   values (
     new.id::text,
-    coalesce(p.display_name, meta_name),  -- NULL is fine; email is NOT
+    coalesce(p.display_name, meta_name),
     'student',
     coalesce(p.cohort, 'base')
   )
@@ -63,7 +57,7 @@ begin
 end;
 $$;
 
--- ---- #13: memory_snapshots index for the lateral join in v_student_progress
+-- ---- #13: memory_snapshots index ------------------------------------
 create index if not exists memory_snapshots_student_captured_idx
   on public.memory_snapshots (student_id, captured_on desc);
 
@@ -72,8 +66,6 @@ alter table public.pilot_config
   add column if not exists low_talk_threshold_secs int not null default 600
     check (low_talk_threshold_secs > 0);
 
--- SECURITY DEFINER so the webhook (service role) and the views can read
--- the threshold without giving every authenticated user select on cost_caps.
 create or replace function public.get_low_talk_threshold()
 returns int language sql stable security definer set search_path = public as $$
   select coalesce(
@@ -83,10 +75,11 @@ returns int language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function public.get_low_talk_threshold() to authenticated, service_role;
 
--- The original schema declared sessions.flagged_low_talk as a STORED
--- generated column with a hard-coded `< 600` predicate. Replace it with
--- a regular column that the webhook fills using the configurable
--- threshold, then backfill from the existing student_talk_seconds.
+-- Drop dependent views BEFORE the column rebuild (CASCADE-free approach).
+drop view if exists public.v_pilot_metrics;
+drop view if exists public.v_student_progress;
+
+-- Rebuild flagged_low_talk: generated column → regular column.
 alter table public.sessions drop column if exists flagged_low_talk;
 alter table public.sessions
   add column flagged_low_talk boolean not null default false;
@@ -97,10 +90,47 @@ update public.sessions
     and student_talk_seconds < public.get_low_talk_threshold()
   );
 
--- ---- #9 / #12: race-safe role change with from/to return -------------
--- Atomically guards against the "last superadmin demotes themselves and
--- locks everyone out" race, and returns the previous role so callers can
--- log a meaningful audit entry.
+-- Recreate v_student_progress (definition from db/05_staff_split.sql).
+create or replace view public.v_student_progress as
+select
+  s.student_id, s.display_name, s.cohort,
+  count(distinct se.session_no)               as sessions_done,
+  round(avg(se.student_talk_seconds)/60.0, 1) as avg_talk_min,
+  count(*) filter (where se.flagged_low_talk) as silent_sessions,
+  max(ms.summary)                             as latest_memory
+from public.students s
+left join public.sessions se on se.student_id = s.student_id
+left join lateral (
+  select summary from public.memory_snapshots m
+  where m.student_id = s.student_id order by captured_on desc limit 1
+) ms on true
+where s.role = 'student'
+group by s.student_id, s.display_name, s.cohort;
+
+-- Recreate v_pilot_metrics (definition from db/01_schema.sql).
+create or replace view public.v_pilot_metrics as
+with conf as (
+  select st.cohort, q.sitting, avg(q.overall) as conf
+  from public.v_questionnaire_scored q
+  join public.students st on st.student_id=q.student_id
+  group by st.cohort, q.sitting
+)
+select
+  st.cohort,
+  round(avg(se.student_talk_seconds)/60.0,1)                     as avg_talk_min,
+  count(*) filter (where se.flagged_low_talk)                    as silent_sessions,
+  round(avg(ad.delta) filter (where ad.instrument='det'),2)      as det_gain,
+  round(avg(ad.delta) filter (where ad.instrument='ixl'),2)      as ixl_gain,
+  round((select conf from conf where conf.cohort=st.cohort and sitting='post')
+      - (select conf from conf where conf.cohort=st.cohort and sitting='pre'),2) as confidence_gain,
+  round(avg(case when ap.would_continue then 1 else 0 end)*100,0) as pct_would_continue
+from public.students st
+left join public.sessions se          on se.student_id=st.student_id
+left join public.v_assessment_delta ad on ad.student_id=st.student_id
+left join public.adoption_survey ap    on ap.student_id=st.student_id
+group by st.cohort;
+
+-- ---- #9 / #12: race-safe role change ----------------------------------
 create or replace function public.safe_set_role(
   p_target text,
   p_new_role text
@@ -133,7 +163,6 @@ $$;
 grant execute on function public.safe_set_role(text, text) to service_role;
 
 -- ---- bonus: assessments.cefr check constraint ------------------------
--- NOT VALID so existing rows aren't rejected; new writes are.
 do $$
 begin
   if not exists (
