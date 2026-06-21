@@ -93,7 +93,7 @@ export default async function StudentDetail({
     const [sRes, aRes, qRes, mRes] = await Promise.all([
       supabase
         .from("sessions")
-        .select("id, session_no, held_on, duration_seconds, student_talk_seconds, flagged_low_talk, topic, conversation_id, transcript_url, recording_url")
+        .select("id, session_no, held_on, duration_seconds, student_talk_seconds, flagged_low_talk, safety_severity, topic, conversation_id, transcript_url, recording_url")
         .eq("student_id", id)
         .order("held_on", { ascending: false }),
       supabase
@@ -117,6 +117,32 @@ export default async function StudentDetail({
     assessments = aRes.data as Assessment[] | null;
     quest = qRes.data as Quest[] | null;
     memory = mRes.data as { summary: string | null; captured_on: string | null } | null;
+
+    // Load transcript_flags for the per-session safety drilldown.
+    if (sessions?.length) {
+      const sessionIds = sessions.map((s) => s.id);
+      const { data: flagsData } = await supabase
+        .from("transcript_flags")
+        .select("session_id, severity, snippet")
+        .in("session_id", sessionIds);
+      const flagsBySession = new Map<
+        number,
+        { severity: "warn" | "flag" | "block"; snippet: string | null }[]
+      >();
+      for (const f of (flagsData ?? []) as Array<{
+        session_id: number;
+        severity: "warn" | "flag" | "block";
+        snippet: string | null;
+      }>) {
+        const arr = flagsBySession.get(f.session_id) ?? [];
+        arr.push({ severity: f.severity, snippet: f.snippet });
+        flagsBySession.set(f.session_id, arr);
+      }
+      sessions = sessions.map((s) => ({
+        ...s,
+        safety_flags: flagsBySession.get(s.id) ?? [],
+      }));
+    }
 
     // Recordings live in a PRIVATE storage bucket — sessions.recording_url
     // stores the path; mint short-lived signed URLs at render time.

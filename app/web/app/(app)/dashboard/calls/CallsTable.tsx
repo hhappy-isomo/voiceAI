@@ -2,9 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Search, Download, Sparkles } from "lucide-react";
+import { AlertTriangle, Search, Download, Sparkles, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { SessionDrawer, type SessionRow } from "@/components/SessionDrawer";
+
+export type SafetyFlag = {
+  severity: "warn" | "flag" | "block";
+  snippet: string | null;
+};
 
 export type CallRow = {
   id: number;
@@ -16,6 +21,8 @@ export type CallRow = {
   duration_seconds: number | null;
   student_talk_seconds: number | null;
   flagged_low_talk: boolean;
+  safety_severity: "clean" | "warn" | "flag" | "block" | null;
+  safety_flags: SafetyFlag[];
   topic: string | null;
   conversation_id: string | null;
   transcript_url: string | null;
@@ -34,6 +41,7 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
   const [to, setTo] = useState("");
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [scoredOnly, setScoredOnly] = useState(false);
+  const [safetyOnly, setSafetyOnly] = useState(false);
   const [open, setOpen] = useState<SessionRow | null>(null);
 
   const filtered = useMemo(() => {
@@ -42,6 +50,7 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
       if (cohort !== "all" && r.cohort !== cohort) return false;
       if (flaggedOnly && !r.flagged_low_talk) return false;
       if (scoredOnly && r.cefr == null) return false;
+      if (safetyOnly && r.safety_severity !== "flag" && r.safety_severity !== "block") return false;
       if (from && r.held_on < from) return false;
       if (to && r.held_on > to) return false;
       if (ql) {
@@ -55,7 +64,7 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
       }
       return true;
     });
-  }, [rows, q, cohort, from, to, flaggedOnly, scoredOnly]);
+  }, [rows, q, cohort, from, to, flaggedOnly, scoredOnly, safetyOnly]);
 
   function exportCsv() {
     const headers = [
@@ -106,6 +115,8 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
       duration_seconds: r.duration_seconds,
       student_talk_seconds: r.student_talk_seconds,
       flagged_low_talk: r.flagged_low_talk,
+      safety_severity: r.safety_severity,
+      safety_flags: r.safety_flags,
       topic: r.topic,
       conversation_id: r.conversation_id,
       transcript_url: r.transcript_url,
@@ -162,6 +173,12 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
           label="Scored"
           icon={<Sparkles className="h-3 w-3" />}
         />
+        <FilterToggle
+          on={safetyOnly}
+          onClick={() => setSafetyOnly((v) => !v)}
+          label="Safety"
+          icon={<ShieldAlert className="h-3 w-3" />}
+        />
         <button
           onClick={exportCsv}
           className="flex items-center gap-1.5 border border-fg/30 px-2.5 py-1.5 text-[10px] uppercase tracking-widest text-fg-dim hover:border-fg hover:text-fg"
@@ -183,6 +200,7 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
               <th className="px-5 py-2.5 font-bold text-right">Sess</th>
               <th className="px-5 py-2.5 font-bold text-right">Dur</th>
               <th className="px-5 py-2.5 font-bold text-right">Talk</th>
+              <th className="px-5 py-2.5 font-bold text-center">Safety</th>
               <th className="px-5 py-2.5 font-bold text-center">CEFR</th>
               <th className="px-5 py-2.5 font-bold text-right">Score</th>
               <th className="px-5 py-2.5 font-bold">Summary</th>
@@ -191,7 +209,7 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-5 py-12 text-center text-fg-muted">
+                <td colSpan={9} className="px-5 py-12 text-center text-fg-muted">
                   No calls match.
                 </td>
               </tr>
@@ -203,6 +221,8 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
                 className={cn(
                   "cursor-pointer border-t border-fg/15 transition-colors hover:bg-fg hover:text-bg",
                   r.flagged_low_talk && "bg-fg/[0.06]",
+                  (r.safety_severity === "flag" || r.safety_severity === "block") &&
+                    "bg-fg/[0.12]",
                 )}
               >
                 <td className="px-5 py-2 tabular-nums text-fg-dim">{r.held_on}</td>
@@ -238,6 +258,9 @@ export function CallsTable({ rows }: { rows: CallRow[] }) {
                   ) : (
                     "—"
                   )}
+                </td>
+                <td className="px-5 py-2 text-center">
+                  <SafetyBadge severity={r.safety_severity} />
                 </td>
                 <td className="px-5 py-2 text-center font-bold">
                   {r.cefr ?? "—"}
@@ -308,4 +331,22 @@ function FilterToggle({
 function csv(s: string): string {
   if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
+}
+
+function SafetyBadge({
+  severity,
+}: {
+  severity: "clean" | "warn" | "flag" | "block" | null;
+}) {
+  if (severity == null || severity === "clean") return <span className="text-fg-dim">—</span>;
+  const label = severity.toUpperCase();
+  return (
+    <span
+      className="inline-flex items-center gap-1 border border-current px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+      title={`Safety scan: ${severity}`}
+    >
+      <ShieldAlert className="h-3 w-3" />
+      {label}
+    </span>
+  );
 }
