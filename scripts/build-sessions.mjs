@@ -1,8 +1,17 @@
+#!/usr/bin/env node
+// Bundle the 24 prompt files in agent/prompts/ into app/web/lib/sessions-data.ts.
+// Read by /api/activate-session to PATCH today's prompt onto the ElevenLabs agent.
+//
+// Run after touching agent/prompts/. CI also runs scripts/check-prompts-drift.mjs
+// to catch hand-edits that bypass build_prompts.py.
+
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const PROMPTS_DIR = "/Users/eudaimonia/Desktop/voiceAI/agent/prompts";
-const OUT_FILE = "/Users/eudaimonia/Desktop/voiceAI/app/web/lib/sessions-data.ts";
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PROMPTS_DIR = join(repoRoot, "agent", "prompts");
+const OUT_FILE = join(repoRoot, "app", "web", "lib", "sessions-data.ts");
 
 const files = readdirSync(PROMPTS_DIR)
   .filter((f) => /^Session_\d+_.+\.txt$/i.test(f))
