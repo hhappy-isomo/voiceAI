@@ -1,5 +1,6 @@
 import { BYPASS_AUTH, requireFacilitator } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
+import { signRecordingPaths } from "@/lib/recordings";
 import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
 import { CallsTable, type CallRow } from "./CallsTable";
@@ -74,7 +75,14 @@ export default async function CallsPage() {
       memByStudent.set(m.student_id, arr);
     }
 
-    rows = (sessions ?? []).map((s) => {
+    // Recordings live in a PRIVATE storage bucket — sessions.recording_url
+    // stores the path, and we mint a short-lived signed URL per render so
+    // student audio is never reachable via a permanent public URL.
+    const signedUrls = await signRecordingPaths(
+      (sessions ?? []).map((s) => s.recording_url),
+    );
+
+    rows = (sessions ?? []).map((s, i) => {
       const stu = studentMap.get(s.student_id);
       const rub = rubricMap.get(s.id);
       const memArr = memByStudent.get(s.student_id) ?? [];
@@ -92,7 +100,7 @@ export default async function CallsPage() {
         topic: s.topic,
         conversation_id: s.conversation_id,
         transcript_url: s.transcript_url,
-        recording_url: s.recording_url,
+        recording_url: signedUrls[i],
         cefr: rub?.cefr ?? null,
         rubric_overall: rub?.overall ?? null,
         summary: snap?.summary ?? null,

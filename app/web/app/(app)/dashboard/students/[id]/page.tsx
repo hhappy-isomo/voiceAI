@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { BYPASS_AUTH, requireFacilitator } from "@/lib/dal";
 import { createClient } from "@/lib/supabase/server";
+import { signRecordingPaths } from "@/lib/recordings";
 import { Card } from "@/components/ui/Card";
 import { TopBar } from "@/components/ui/TopBar";
 import { CohortToggle } from "@/components/CohortToggle";
@@ -116,6 +117,15 @@ export default async function StudentDetail({
     assessments = aRes.data as Assessment[] | null;
     quest = qRes.data as Quest[] | null;
     memory = mRes.data as { summary: string | null; captured_on: string | null } | null;
+
+    // Recordings live in a PRIVATE storage bucket — sessions.recording_url
+    // stores the path; mint short-lived signed URLs at render time.
+    if (sessions?.length) {
+      const signedUrls = await signRecordingPaths(
+        sessions.map((s) => s.recording_url),
+      );
+      sessions = sessions.map((s, i) => ({ ...s, recording_url: signedUrls[i] }));
+    }
   }
 
   const display = student.display_name ?? id.slice(0, 8);

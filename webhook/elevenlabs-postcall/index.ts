@@ -2,12 +2,18 @@
 //
 // Handles two ElevenLabs webhook types:
 //   post_call_transcription -> writes a `sessions` row (talk-time, duration) + a Mem0 memory snapshot
-//   post_call_audio         -> stores the recording in Supabase Storage, links it on the session row
+//   post_call_audio         -> stores the recording in a PRIVATE Supabase Storage bucket
+//                              and stores its PATH in sessions.recording_url
+//                              (the dashboard signs a short-lived URL on demand)
 //
-// Secrets to set (supabase secrets set ...):
-//   MEM0_API_KEY                 - to snapshot what the tutor remembers
-//   ELEVENLABS_WEBHOOK_SECRET    - to verify the signature (optional but recommended)
+// Required secrets (supabase secrets set ...):
+//   MEM0_API_KEY              - to snapshot what the tutor remembers
+//   ELEVENLABS_WEBHOOK_SECRET - REQUIRED. Set to verify signatures.
+//                               Set WEBHOOK_DEV_BYPASS=1 to skip for local only.
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
+//
+// IMPORTANT manual step: in the Supabase dashboard, set the `recordings`
+// bucket to PRIVATE. The webhook stores paths; signed URLs are minted in-app.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -17,15 +23,27 @@ const supabase = createClient(
 );
 const MEM0_API_KEY = Deno.env.get("MEM0_API_KEY");
 const WEBHOOK_SECRET = Deno.env.get("ELEVENLABS_WEBHOOK_SECRET");
+const WEBHOOK_DEV_BYPASS = Deno.env.get("WEBHOOK_DEV_BYPASS") === "1";
 const RECORDINGS_BUCKET = "recordings";
 
 // ---- helpers ---------------------------------------------------------------
 
+// Constant-time equal for hex strings of equal length.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // Verify ElevenLabs HMAC signature header: "t=<ts>,v0=<hex>" over `${ts}.${body}`.
+// Default-closed: returns false if no secret is configured. Use
+// WEBHOOK_DEV_BYPASS=1 to opt out for local testing only.
 async function verify(rawBody: string, header: string | null): Promise<boolean> {
-  if (!WEBHOOK_SECRET) return true;            // not configured yet -> allow (set it before go-live)
+  if (WEBHOOK_DEV_BYPASS) return true;
+  if (!WEBHOOK_SECRET) return false;
   if (!header) return false;
-  const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+  const parts = Object.fromEntries(header.split(",").map((p) => p.split("=", 2)));
   const t = parts["t"], v0 = parts["v0"];
   if (!t || !v0) return false;
   const key = await crypto.subtle.importKey(
@@ -34,7 +52,7 @@ async function verify(rawBody: string, header: string | null): Promise<boolean> 
   );
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${rawBody}`));
   const hex = [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return hex === v0;
+  return timingSafeEqual(hex, v0);
 }
 
 // Estimate how long the student (role 'user') spoke, from turn timestamps.
@@ -49,13 +67,24 @@ function userTalkSeconds(transcript: any[], callDuration: number): number {
   return Math.round(total);
 }
 
+// Read the configurable "silent session" threshold via the SECURITY DEFINER
+// RPC. Falls back to 600s if the RPC is missing (migration not yet applied).
+async function lowTalkThreshold(): Promise<number> {
+  const { data, error } = await supabase.rpc("get_low_talk_threshold");
+  if (error || typeof data !== "number") return 600;
+  return data;
+}
+
 // Pull the student's current memories from Mem0 and fold them into one summary string.
 async function mem0Summary(studentId: string): Promise<string | null> {
   if (!MEM0_API_KEY) return null;
   try {
     const r = await fetch(
-      `https://api.mem0.ai/v1/memories/?user_id=${encodeURIComponent(studentId)}`,
-      { headers: { Authorization: `Token ${MEM0_API_KEY}` } },
+      `https://api.mem0.ai/v1/memories?user_id=${encodeURIComponent(studentId)}`,
+      {
+        headers: { Authorization: `Token ${MEM0_API_KEY}` },
+        signal: AbortSignal.timeout(5000),
+      },
     );
     if (!r.ok) return null;
     const data = await r.json();
@@ -79,6 +108,7 @@ async function mem0Add(studentId: string, transcript: any[]): Promise<void> {
       method: "POST",
       headers: { Authorization: `Token ${MEM0_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({ messages, user_id: studentId }),
+      signal: AbortSignal.timeout(5000),
     });
   } catch (_e) { /* best-effort */ }
 }
@@ -87,11 +117,24 @@ function dynamicVars(data: any): Record<string, any> {
   return data?.conversation_initiation_client_data?.dynamic_variables ?? data?.dynamic_variables ?? {};
 }
 
+// Run `task` after we've returned the response to ElevenLabs. Uses
+// Supabase Edge Function's `EdgeRuntime.waitUntil` when available so the
+// runtime keeps the worker alive; falls back to fire-and-forget.
+function background(task: Promise<unknown>): void {
+  const er = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+  if (er?.waitUntil) er.waitUntil(task.catch(() => {}));
+  else task.catch(() => {});
+}
+
 // ---- handler ---------------------------------------------------------------
 
 Deno.serve(async (req) => {
   const raw = await req.text();
   if (!(await verify(raw, req.headers.get("ElevenLabs-Signature")))) {
+    // 401 if a signature was attempted but invalid; 503 if simply unconfigured.
+    if (!WEBHOOK_SECRET && !WEBHOOK_DEV_BYPASS) {
+      return new Response("webhook secret not configured", { status: 503 });
+    }
     return new Response("bad signature", { status: 401 });
   }
 
@@ -109,8 +152,9 @@ Deno.serve(async (req) => {
       const up = await supabase.storage.from(RECORDINGS_BUCKET)
         .upload(path, bytes, { contentType: "audio/mpeg", upsert: true });
       if (!up.error) {
-        const { data: pub } = supabase.storage.from(RECORDINGS_BUCKET).getPublicUrl(path);
-        await supabase.from("sessions").update({ recording_url: pub.publicUrl })
+        // Store the storage PATH (not a URL). Dashboard mints a signed URL
+        // on demand via lib/recordings.ts.
+        await supabase.from("sessions").update({ recording_url: path })
           .eq("conversation_id", conversationId);
       }
     }
@@ -131,21 +175,29 @@ Deno.serve(async (req) => {
     const sessionNo = vars["session_no"] ? Number(vars["session_no"]) : null;
     const topic = vars["topic"] ?? null;
 
+    const threshold = await lowTalkThreshold();
+    const flagged = talk > 0 && talk < threshold;
+
     const { error } = await supabase.from("sessions").upsert({
       student_id: studentId,
       session_no: sessionNo,
       duration_seconds: callDuration,
       student_talk_seconds: talk,
+      flagged_low_talk: flagged,
       topic,
       conversation_id: conversationId,
     }, { onConflict: "conversation_id" });
     if (error) console.error("session upsert error", error);
 
-    await mem0Add(studentId, transcript);            // grow the student's memory
-    const summary = await mem0Summary(studentId);
-    if (summary) {
-      await supabase.from("memory_snapshots").insert({ student_id: studentId, summary });
-    }
+    // Don't block the 200 — Mem0 calls happen after we reply.
+    background((async () => {
+      await mem0Add(studentId, transcript);
+      const summary = await mem0Summary(studentId);
+      if (summary) {
+        await supabase.from("memory_snapshots").insert({ student_id: studentId, summary });
+      }
+    })());
+
     return new Response("ok", { status: 200 });
   }
 

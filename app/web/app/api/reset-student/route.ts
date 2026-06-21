@@ -35,11 +35,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `db: ${rpcErr.message}` }, { status: 500 });
   }
 
-  // 2) Wipe Mem0 memories (best-effort)
+  // 2) Delete the Supabase auth user. Without this the student's Google
+  // session keeps working, and the auth trigger re-creates a half-stale
+  // students row on next login.
+  const { error: authErr } = await admin.auth.admin.deleteUser(targetId);
+  // Soft-fail: the DB wipe already succeeded; surface the error so the
+  // facilitator can retry, but don't roll back the wipe.
+  const authStatus = authErr ? authErr.message : "ok";
+
+  // 3) Wipe Mem0 memories (best-effort)
   let mem0Status: number | null = null;
   if (process.env.MEM0_API_KEY) {
     const r = await fetch(
-      `https://api.mem0.ai/v1/memories/?user_id=${encodeURIComponent(targetId)}`,
+      `https://api.mem0.ai/v1/memories?user_id=${encodeURIComponent(targetId)}`,
       {
         method: "DELETE",
         headers: { Authorization: `Token ${process.env.MEM0_API_KEY}` },
@@ -51,8 +59,12 @@ export async function POST(req: Request) {
   await supabase.rpc("log_audit", {
     p_action: "reset_student",
     p_target_id: targetId,
-    p_details: { mem0_status: mem0Status },
+    p_details: { auth: authStatus, mem0_status: mem0Status },
   });
 
-  return NextResponse.json({ ok: true, mem0_status: mem0Status });
+  return NextResponse.json({
+    ok: true,
+    auth: authStatus,
+    mem0_status: mem0Status,
+  });
 }

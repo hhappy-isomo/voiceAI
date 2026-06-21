@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
+import { checkBudget } from "@/lib/cost-guard";
 
-// Rough ElevenLabs Conversational AI cost per second.
-// Update when your tier changes. (Creator tier ≈ $0.08–0.10/min)
+// Fallback ElevenLabs Conversational AI cost per second, used only when the
+// detail response omits metadata.cost. (Creator tier ≈ $0.08–0.10/min.)
 const EL_COST_PER_SEC = 0.0015;
 
 type EConv = {
@@ -45,6 +46,17 @@ export async function POST() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  // Kill switch still applies to sync (it touches the ElevenLabs API);
+  // drain_mode does not — sync just records what already happened.
+  const adminEarly = adminClient();
+  const guard = await checkBudget(adminEarly);
+  if (!guard.ok && guard.reason === "kill_all") {
+    return NextResponse.json(
+      { error: guard.reason, detail: guard.detail },
+      { status: guard.status },
+    );
+  }
+
   if (!process.env.ELEVENLABS_API_KEY) {
     return NextResponse.json(
       { error: "ELEVENLABS_API_KEY not set" },
@@ -68,7 +80,7 @@ export async function POST() {
 
   // Pre-load the set of real student_ids so we can null-out FK violations
   // (e.g. the dev-bypass placeholder UUID) before they error the upsert.
-  const admin = adminClient();
+  const admin = adminEarly;
   const { data: studentRows } = await admin
     .from("students")
     .select("student_id");
@@ -110,7 +122,16 @@ export async function POST() {
       detail.metadata?.call_duration_secs ??
       c.call_duration_secs ??
       0;
-    const cost = dur * EL_COST_PER_SEC;
+    // Prefer ElevenLabs' authoritative cost when present; fall back to
+    // the per-second estimate. metadata.cost is in USD on recent API
+    // versions; some older payloads use total_cost.
+    const reportedCost =
+      typeof detail.metadata?.cost === "number"
+        ? detail.metadata.cost
+        : typeof detail.metadata?.total_cost === "number"
+          ? detail.metadata.total_cost
+          : null;
+    const cost = reportedCost ?? dur * EL_COST_PER_SEC;
 
     const { error } = await admin.from("usage_log").upsert(
       {
@@ -124,6 +145,7 @@ export async function POST() {
           message_count: c.message_count,
           status: c.status,
           raw_student_id: rawSid,
+          cost_source: reportedCost != null ? "reported" : "estimate",
         },
       },
       { onConflict: "source,external_id" },

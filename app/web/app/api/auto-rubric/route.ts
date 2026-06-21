@@ -1,10 +1,38 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
+import { adminClient } from "@/lib/admin";
 import { RUBRIC_SYSTEM, parseRubric } from "@/lib/rubric";
+import { checkBudget } from "@/lib/cost-guard";
 
 const MODEL = "claude-sonnet-4-6";
+
+// Claude Sonnet 4.6 token pricing (USD per token). Update when pricing changes.
+// Cache writes are 1.25x input; cache reads are 0.1x input.
+const PRICE_IN  = 3e-6;     // $3 per Mtok
+const PRICE_OUT = 15e-6;    // $15 per Mtok
+const PRICE_CACHE_READ  = PRICE_IN * 0.1;
+const PRICE_CACHE_WRITE = PRICE_IN * 1.25;
+
+// SSRF guard: only fetch transcripts from ElevenLabs-controlled hosts.
+const TRANSCRIPT_HOST_ALLOWLIST = [
+  "api.elevenlabs.io",
+  "storage.elevenlabs.io",
+  "elevenlabs.io",
+];
+
+function isAllowedTranscriptUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    return TRANSCRIPT_HOST_ALLOWLIST.some(
+      (h) => host === h || host.endsWith(`.${h}`),
+    );
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(req: Request) {
   const supabase = await createServerClient();
@@ -18,7 +46,7 @@ export async function POST(req: Request) {
     .select("role")
     .eq("student_id", user.id)
     .single();
-  if (me?.role !== "facilitator") {
+  if (me?.role !== "facilitator" && me?.role !== "superadmin") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -53,6 +81,26 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "session has no transcript_url" },
       { status: 422 },
+    );
+  }
+  if (!isAllowedTranscriptUrl(session.transcript_url)) {
+    return NextResponse.json(
+      { error: "transcript_url host not allowlisted" },
+      { status: 422 },
+    );
+  }
+
+  const admin = adminClient();
+
+  // Cost cap pre-flight. Estimate one Sonnet call ~ $0.05 worst case.
+  const guard = await checkBudget(admin, {
+    studentId: session.student_id,
+    estimatedCostUsd: 0.05,
+  });
+  if (!guard.ok) {
+    return NextResponse.json(
+      { error: guard.reason, detail: guard.detail },
+      { status: guard.status },
     );
   }
 
@@ -98,12 +146,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Save via service-role (bypasses RLS).
-  const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } },
-  );
   const { error: insertErr } = await admin.from("auto_rubric_scores").upsert(
     {
       session_id: sessionId,
@@ -121,26 +163,40 @@ export async function POST(req: Request) {
     { onConflict: "session_id" },
   );
 
-  // Usage log for the cost meter.
+  // Real per-token cost: split input vs output vs cached.
   const usage = completion.usage as {
     input_tokens?: number;
     output_tokens?: number;
     cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
   };
-  const totalTokens =
-    (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0);
+  const inTok    = usage.input_tokens ?? 0;
+  const outTok   = usage.output_tokens ?? 0;
+  const readTok  = usage.cache_read_input_tokens ?? 0;
+  const writeTok = usage.cache_creation_input_tokens ?? 0;
+  // input_tokens excludes both cached counts on Anthropic's API.
+  const cost =
+    inTok    * PRICE_IN +
+    outTok   * PRICE_OUT +
+    readTok  * PRICE_CACHE_READ +
+    writeTok * PRICE_CACHE_WRITE;
+  const totalTokens = inTok + outTok + readTok + writeTok;
+
   if (totalTokens > 0) {
     await admin.from("usage_log").upsert(
       {
         source: "anthropic",
         units: totalTokens,
-        cost_usd: totalTokens * 0.000003,
+        cost_usd: cost,
         student_id: session.student_id,
         external_id: `auto-rubric:${sessionId}`,
         meta: {
           model: MODEL,
           session_id: sessionId,
-          cache_read: usage.cache_read_input_tokens ?? 0,
+          input_tokens: inTok,
+          output_tokens: outTok,
+          cache_read: readTok,
+          cache_write: writeTok,
         },
       },
       { onConflict: "source,external_id" },
@@ -150,20 +206,25 @@ export async function POST(req: Request) {
   await supabase.rpc("log_audit", {
     p_action: "rubric_scored",
     p_target_id: String(sessionId),
-    p_details: { cefr: rubric.cefr, overall: rubric.overall },
+    p_details: { cefr: rubric.cefr, overall: rubric.overall, cost_usd: cost },
   });
 
   return NextResponse.json({
     saved: !insertErr,
     error: insertErr?.message ?? null,
     rubric,
-    cache_hit_tokens: usage.cache_read_input_tokens ?? 0,
+    cost_usd: cost,
+    cache_hit_tokens: readTok,
   });
 }
 
 async function fetchTranscript(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { headers: { Accept: "*/*" } });
+    const res = await fetch(url, {
+      headers: { Accept: "*/*" },
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error", // don't follow redirects — they could leave the allowlist
+    });
     if (!res.ok) return null;
     const ct = res.headers.get("content-type") ?? "";
     if (ct.includes("json")) {

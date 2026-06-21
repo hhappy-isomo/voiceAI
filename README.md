@@ -23,7 +23,9 @@ Student (Google login) ──> Web app (Supabase Auth) ──> Embedded ElevenLa
   prompt can change daily without losing the thread.
 - **Identity:** Supabase Auth with Google sign-in. The Supabase UID is the universal key
   passed to the agent as a dynamic variable and used as the Mem0 `user_id`. Only the
-  opaque UID reaches the agent/Mem0/Exa — email and name stay in Supabase.
+  opaque UID reaches the agent/Mem0/Exa. The student's email never leaves Supabase;
+  their Google `full_name` (if set) is stored as `display_name` so facilitators can
+  recognise students in the dashboard — it's never sent to the agent.
 - **Memory:** Mem0 cloud MCP for the pilot; self-hosted OpenMemory MCP at scale.
 
 ## Repo layout
@@ -32,17 +34,20 @@ Student (Google login) ──> Web app (Supabase Auth) ──> Embedded ElevenLa
 |------|------|
 | `agent/prompts/` | The 24 standalone session system prompts (paste one per day) |
 | `agent/build_prompts.py` | Regenerates all 24 prompts from one template + per-session data |
-| `agent/system-prompts.txt` | Master Agent A / Agent B prompts (reference) |
+| `agent/system-prompts.txt` | Reference master prompts (design artifact — the pilot runs one ElevenLabs agent) |
 | `agent/content-pack.md` | The 24 themes (provocations, push moves, compose tasks) |
 | `db/01_schema.sql` | Supabase tables + the monitoring views (incl. the 6 metrics) |
 | `db/02_auth.sql` | Google-auth wiring, roles, row-level security |
 | `app/` | The student portal + facilitator dashboard (build prompt) |
-| `webhook/` | Post-call webhook (Supabase Edge Function) — TODO |
+| `webhook/` | Post-call webhook (Supabase Edge Function): transcripts, talk-time, memory snapshots, recording capture |
 | `docs/` | Board materials: scope & sequence, success metrics, build spec, questionnaire |
 
 ## Setup order
 
-1. Create a Supabase project → run `db/01_schema.sql`, then `db/02_auth.sql`.
+1. Create a Supabase project → run `db/01_schema.sql`, then `db/02_auth.sql`,
+   then the remaining migrations in order (`db/03..11_*.sql`). In the Supabase
+   dashboard, create a Storage bucket named `recordings` and set it to PRIVATE
+   (the webhook stores paths; the app mints signed URLs on demand).
 2. Enable Google provider in Supabase Auth.
 3. Create the ElevenLabs agent → paste `agent/prompts/Session_01_*.txt`, set voice.
 4. Add Mem0 as a Custom MCP Server in ElevenLabs; map the `student_id` dynamic variable
