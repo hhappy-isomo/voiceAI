@@ -53,7 +53,10 @@ export async function updateSession(request: NextRequest) {
     path === "/login" ||
     path.startsWith("/auth/") ||
     path.startsWith("/_next") ||
-    path === "/favicon.ico";
+    path === "/favicon.ico" ||
+    // Server-to-server: pg_cron hits this with X-Cron-Secret; the route
+    // validates the secret itself, so no Supabase session is required.
+    path.startsWith("/api/cron/");
 
   // Unauthenticated → /login (except public routes).
   if (!user && !isPublic) {
