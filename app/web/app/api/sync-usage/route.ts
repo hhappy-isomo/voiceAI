@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
 import { checkBudget } from "@/lib/cost-guard";
+import { checkSameOrigin } from "@/lib/csrf";
 
 // Fallback ElevenLabs Conversational AI cost per second, used only when the
 // detail response omits metadata.cost. (Creator tier ≈ $0.08–0.10/min.)
@@ -30,7 +31,9 @@ type EConvDetail = {
   };
 };
 
-export async function POST() {
+export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const supabase = await createServerClient();
   const {
     data: { user },

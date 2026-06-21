@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSuperadminApi } from "@/lib/superadmin-guard";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
+import { checkSameOrigin } from "@/lib/csrf";
 
 export async function GET() {
   const guard = await requireSuperadminApi();
@@ -25,6 +26,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const guard = await requireSuperadminApi();
   if (!guard.ok) return guard.response;
   const body = await req.json().catch(() => ({}));
