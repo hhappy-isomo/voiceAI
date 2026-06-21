@@ -80,7 +80,7 @@ async function mem0Summary(studentId: string): Promise<string | null> {
   if (!MEM0_API_KEY) return null;
   try {
     const r = await fetch(
-      `https://api.mem0.ai/v1/memories?user_id=${encodeURIComponent(studentId)}`,
+      `https://api.mem0.ai/v1/memories/?user_id=${encodeURIComponent(studentId)}`,
       {
         headers: { Authorization: `Token ${MEM0_API_KEY}` },
         signal: AbortSignal.timeout(5000),
@@ -115,6 +115,77 @@ async function mem0Add(studentId: string, transcript: any[]): Promise<void> {
 
 function dynamicVars(data: any): Record<string, any> {
   return data?.conversation_initiation_client_data?.dynamic_variables ?? data?.dynamic_variables ?? {};
+}
+
+// ---- safety scan -----------------------------------------------------------
+
+type SafetyRule = {
+  id: number;
+  word_or_re: string;
+  is_regex: boolean;
+  severity: "warn" | "flag" | "block";
+};
+type SafetyHit = { rule_id: number; severity: "warn" | "flag" | "block"; snippet: string };
+type Severity = "clean" | "warn" | "flag" | "block";
+
+const SEVERITY_RANK: Record<Severity, number> = { clean: 0, warn: 1, flag: 2, block: 3 };
+
+// Concatenate transcript messages into one string for substring/regex search.
+function transcriptText(transcript: any[]): string {
+  return transcript
+    .map((t) => (typeof t?.message === "string" ? t.message : ""))
+    .filter(Boolean)
+    .join(" \n ");
+}
+
+// Scan transcript text against active safety_rules. Returns the overall
+// severity and one SafetyHit per rule that matched. Regex compile errors
+// are skipped (logged), not thrown — one bad rule can't break a session.
+async function scanSafety(transcript: any[]): Promise<{ severity: Severity; hits: SafetyHit[] }> {
+  const { data: rules } = await supabase
+    .from("safety_rules")
+    .select("id, word_or_re, is_regex, severity")
+    .returns<SafetyRule[]>();
+  if (!rules?.length) return { severity: "clean", hits: [] };
+
+  const text = transcriptText(transcript);
+  if (!text) return { severity: "clean", hits: [] };
+  const lower = text.toLowerCase();
+
+  const hits: SafetyHit[] = [];
+  let worst: Severity = "clean";
+
+  for (const r of rules) {
+    let matchStart = -1;
+    let matchLen = 0;
+    if (r.is_regex) {
+      try {
+        const re = new RegExp(r.word_or_re, "i");
+        const m = text.match(re);
+        if (m && m.index !== undefined) {
+          matchStart = m.index;
+          matchLen = m[0].length;
+        }
+      } catch (e) {
+        console.error("bad safety regex", r.id, (e as Error).message);
+        continue;
+      }
+    } else {
+      const idx = lower.indexOf(r.word_or_re.toLowerCase());
+      if (idx >= 0) {
+        matchStart = idx;
+        matchLen = r.word_or_re.length;
+      }
+    }
+    if (matchStart >= 0) {
+      const before = Math.max(0, matchStart - 40);
+      const after = Math.min(text.length, matchStart + matchLen + 40);
+      const snippet = text.slice(before, after).replace(/\s+/g, " ").trim().slice(0, 200);
+      hits.push({ rule_id: r.id, severity: r.severity, snippet });
+      if (SEVERITY_RANK[r.severity] > SEVERITY_RANK[worst]) worst = r.severity;
+    }
+  }
+  return { severity: worst, hits };
 }
 
 // Run `task` after we've returned the response to ElevenLabs. Uses
@@ -178,16 +249,38 @@ Deno.serve(async (req) => {
     const threshold = await lowTalkThreshold();
     const flagged = talk > 0 && talk < threshold;
 
+    // Scan synchronously so safety_severity lands on the session row in the
+    // same upsert. (Cheap: in-memory string ops over the active rules table.)
+    const safety = await scanSafety(transcript);
+
     const { error } = await supabase.from("sessions").upsert({
       student_id: studentId,
       session_no: sessionNo,
       duration_seconds: callDuration,
       student_talk_seconds: talk,
       flagged_low_talk: flagged,
+      safety_severity: safety.severity,
       topic,
       conversation_id: conversationId,
     }, { onConflict: "conversation_id" });
     if (error) console.error("session upsert error", error);
+
+    // Write each rule hit to transcript_flags. Lookup the session id by
+    // conversation_id since upsert doesn't return it portably.
+    if (safety.hits.length) {
+      const { data: sessRow } = await supabase
+        .from("sessions").select("id").eq("conversation_id", conversationId).maybeSingle();
+      if (sessRow?.id) {
+        const rows = safety.hits.map((h) => ({
+          session_id: sessRow.id,
+          rule_id: h.rule_id,
+          severity: h.severity,
+          snippet: h.snippet,
+        }));
+        const { error: fErr } = await supabase.from("transcript_flags").insert(rows);
+        if (fErr) console.error("transcript_flags insert error", fErr);
+      }
+    }
 
     // Don't block the 200 — Mem0 calls happen after we reply.
     background((async () => {

@@ -70,10 +70,18 @@ async function sumUsage(
   admin: SupabaseClient,
   opts: { since: string; studentId?: string },
 ): Promise<number> {
+  // Fast path: one Postgres aggregate via mtd_spend() RPC.
+  const { data, error } = await admin.rpc("mtd_spend", {
+    p_student_id: opts.studentId ?? null,
+  });
+  if (!error && typeof data === "number") return data;
+  // Fallback: if the RPC isn't deployed yet (db/12_perf_and_data.sql
+  // not run), do the JS scan so the check still works during the
+  // migration window. Slower but identical result.
   let q = admin.from("usage_log").select("cost_usd").gte("at", opts.since);
   if (opts.studentId) q = q.eq("student_id", opts.studentId);
-  const { data } = await q;
-  return (data ?? []).reduce(
+  const { data: rows } = await q;
+  return (rows ?? []).reduce(
     (acc: number, r: { cost_usd: number | null }) =>
       acc + Number(r.cost_usd ?? 0),
     0,

@@ -2,11 +2,11 @@ import "server-only";
 import { adminClient } from "@/lib/admin";
 
 const BUCKET = "recordings";
-// 5 minutes is plenty for the dashboard to render <audio src>. The
-// browser stays on the page, the URL gets opened immediately. If the
-// facilitator leaves the tab and returns later, the page will re-render
-// with a fresh signed URL — they never see a permanent link.
-const TTL_SECONDS = 60 * 5;
+// 30 minutes. Long enough that a facilitator can leave a tab open
+// through a meeting and still hit play; short enough that a leaked
+// URL goes stale before it's useful. If they re-render the page
+// they get a fresh URL anyway.
+const TTL_SECONDS = 60 * 30;
 
 // Turn a storage path stored in sessions.recording_url into a short-lived
 // signed URL. Returns null if the value isn't a path, the file's missing,

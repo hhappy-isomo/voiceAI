@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSuperadminApi } from "@/lib/superadmin-guard";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/admin";
+import { checkSameOrigin } from "@/lib/csrf";
 
 // Three POST actions on one endpoint; payload's "kind" decides.
 //  kind=add_word     -> add a safety rule
@@ -9,6 +10,8 @@ import { adminClient } from "@/lib/admin";
 //  kind=set_consent  -> create a new consent_versions row and set it active
 
 export async function POST(req: Request) {
+  const csrf = checkSameOrigin(req);
+  if (csrf) return csrf;
   const guard = await requireSuperadminApi();
   if (!guard.ok) return guard.response;
   const body = await req.json().catch(() => ({}));
@@ -19,6 +22,25 @@ export async function POST(req: Request) {
   if (kind === "add_word") {
     const word = String(body.word_or_re ?? "").trim();
     if (!word) return NextResponse.json({ error: "word required" }, { status: 400 });
+    if (word.length > 200) {
+      return NextResponse.json(
+        { error: "pattern too long (>200 chars)" },
+        { status: 400 },
+      );
+    }
+    if (body.is_regex) {
+      // Validate the pattern compiles. We don't try to detect ReDoS — the
+      // webhook caps work via Edge runtime timeout. Capping length above
+      // keeps the search space bounded.
+      try {
+        new RegExp(word);
+      } catch (e) {
+        return NextResponse.json(
+          { error: `invalid regex: ${(e as Error).message}` },
+          { status: 400 },
+        );
+      }
+    }
     const { error } = await admin.from("safety_rules").insert({
       word_or_re: word,
       is_regex: !!body.is_regex,
