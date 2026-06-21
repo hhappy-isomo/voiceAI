@@ -22,7 +22,7 @@ export function PowerControls({
       !confirm(
         `${verb} ${word.toUpperCase()}?\n\n${
           key === "kill_all" && next
-            ? "All students will be bounced from the portal immediately."
+            ? "Students lose portal access for new conversations. Calls already in progress will continue until the student hangs up — this does NOT terminate live calls."
             : key === "drain_mode" && next
               ? "No new conversations will be allowed (existing finish naturally)."
               : "Reverting to normal operation."
@@ -51,7 +51,7 @@ export function PowerControls({
     <div className="space-y-5">
       <Row
         title="Kill switch"
-        description="Instantly bounce all students to /paused. Staff can still use the dashboard. Use only in an emergency (distress, runaway agent, lab evacuation)."
+        description="Bounces all students from the portal — they can't start a new conversation. Calls already in progress continue until the student hangs up; the kill switch does not terminate live ElevenLabs calls. Staff still get in. Use in an emergency (distress, runaway agent, lab evacuation)."
         icon={<AlertOctagon className="h-5 w-5" />}
         active={killAll}
         pending={pending}
