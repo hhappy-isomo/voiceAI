@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
+OUT = os.environ.get("PROMPTS_OUT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
 os.makedirs(OUT, exist_ok=True)
 
 # Each session: rich, bespoke fields. Template wraps them into a full standalone prompt.
