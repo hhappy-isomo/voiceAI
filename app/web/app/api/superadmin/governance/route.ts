@@ -22,6 +22,25 @@ export async function POST(req: Request) {
   if (kind === "add_word") {
     const word = String(body.word_or_re ?? "").trim();
     if (!word) return NextResponse.json({ error: "word required" }, { status: 400 });
+    if (word.length > 200) {
+      return NextResponse.json(
+        { error: "pattern too long (>200 chars)" },
+        { status: 400 },
+      );
+    }
+    if (body.is_regex) {
+      // Validate the pattern compiles. We don't try to detect ReDoS — the
+      // webhook caps work via Edge runtime timeout. Capping length above
+      // keeps the search space bounded.
+      try {
+        new RegExp(word);
+      } catch (e) {
+        return NextResponse.json(
+          { error: `invalid regex: ${(e as Error).message}` },
+          { status: 400 },
+        );
+      }
+    }
     const { error } = await admin.from("safety_rules").insert({
       word_or_re: word,
       is_regex: !!body.is_regex,
