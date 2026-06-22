@@ -8,9 +8,10 @@ type Role = "student" | "facilitator" | "superadmin";
 const ALLOWED_TARGET_ROLES: Record<Role, Role[]> = {
   // Students can't promote anyone.
   student: [],
-  // Facilitators can flip between student and facilitator only — they can
-  // neither create nor demote a superadmin.
-  facilitator: ["student", "facilitator"],
+  // Facilitators can no longer promote or demote anyone. Role changes are
+  // a superadmin-only power so staff can't accidentally (or maliciously)
+  // hand out elevated access.
+  facilitator: [],
   // Superadmins can set any role on anyone (except themselves losing the
   // only superadmin slot — enforced atomically in safe_set_role()).
   superadmin: ["student", "facilitator", "superadmin"],
