@@ -15,7 +15,9 @@ const OPTIONS: { role: Role; label: string; icon: React.ComponentType<{ classNam
 
 const ALLOWED: Record<Role, Role[]> = {
   student: [],
-  facilitator: ["student", "facilitator"],
+  // Role changes are superadmin-only — facilitators see the toggle as
+  // read-only.
+  facilitator: [],
   superadmin: ["student", "facilitator", "superadmin"],
 };
 
